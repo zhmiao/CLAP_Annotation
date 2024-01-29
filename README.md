@@ -50,7 +50,7 @@ In order to launch the main script to start the Gradio interface, please run the
 python Gradio_Ann.py
 ```
 ### Main interface
-After installation, run the main script to launch the Gradio interface.
+After installation, run the main script to launch the Gradio interface. Open your web browser and navigate to `http://localhost:7860`.
 
 <img src="images/annotation_tab.png" width="700">
 
