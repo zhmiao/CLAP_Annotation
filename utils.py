@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import librosa
 import soundfile as sf
+from maad import sound, util
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -112,6 +113,63 @@ def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, thet
     preds = (positive_scores >= theta).astype(int)
 
     return total_scores, preds
+
+# %%
+def generate_prediction_results_maad(seg_size, wav, sr, preds, total_scores,
+                                     nperseg=1024, noverlap=512, db_range=90,
+                                     cmap='gray', khz_lims=[0, 10], save_path="./temp"):
+
+    # Create a directory for segments and remove any existing segments.
+    seg_folder = os.path.join(save_path, "segs")
+    shutil.rmtree(seg_folder, ignore_errors=True) 
+    os.makedirs(seg_folder, exist_ok=True)
+
+    matplotlib.use("Agg")
+
+    wav = wav.numpy()
+    # Compute the spectrogram of the waveform.
+    Sxx, _, _, ext = sound.spectrogram(wav, sr, nperseg=nperseg, noverlap=noverlap,
+                                       flims=[khz_lims[0] * 1000, khz_lims[1] * 1000])
+    ext[-1] = khz_lims[1]
+    Sxx_db = util.power2dB(Sxx, db_range, 0)
+
+    fig, ax = plt.subplots(figsize=(30, 5))
+
+    ax.imshow(Sxx_db, extent=ext, origin="lower", cmap=cmap, 
+              vmin=None, vmax=None)
+
+    ax.axis("tight")
+    fig.tight_layout()
+
+    # Iterate over the predictions and overlay the segments on the spectrogram.
+    seg_counter = 0
+    for i in range(len(preds)):
+        p = preds[i]
+        s = total_scores[i][1]
+        if p == 1:
+            ax.add_patch(Rectangle((seg_size * i, 0), seg_size, 64, linewidth=2, facecolor="orange",
+                                   edgecolor="red", alpha=0.25))
+            ax.text(seg_size * i + 0.3, khz_lims[1] - 0.7, "Seg #{}".format(seg_counter), c="red", fontsize=15)
+            ax.text(seg_size * i + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(s*100), c="red", fontsize=15)
+            bbox = Bbox([[seg_size * i, 0],[seg_size * (i + 1), 64]])
+            bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
+                                                                                  seg_size * i,
+                                                                                  seg_size * (i + 1),
+                                                                                  s*100),
+                        bbox_inches=bbox)
+            sf.write(os.path.join(seg_folder, "AudSeg_{}_{}_{}_{:.2f}.wav").format(seg_counter,
+                                                                               seg_size * i, 
+                                                                               seg_size * (i + 1),
+                                                                               s*100),
+                     wav[seg_size*i*sr : seg_size*(i+1)*sr], sr)
+            seg_counter += 1
+
+    ax.set(xlabel=None)
+    ax.tick_params(axis='x', which="major", labelsize=17)
+
+    print("Saving figure..")
+    plt.savefig(os.path.join(save_path, "full_spec.png"), bbox_inches="tight")  
 
 # %%
 def generate_prediction_results(seg_size, wav, sr, preds, total_scores, save_path="./temp"):
@@ -221,7 +279,7 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
     print("Outputing figures..")
 
     save_path = "./temp"
-    generate_prediction_results(inf_dset.seg_size, wav, sr, preds, total_scores,
+    generate_prediction_results_maad(inf_dset.seg_size, wav, sr, preds, total_scores,
                                 save_path=save_path)
 
     print('Done.')
