@@ -115,9 +115,29 @@ def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, thet
     return total_scores, preds
 
 # %%
-def generate_prediction_results_maad(seg_size, wav, sr, preds, total_scores,
-                                     nperseg=1024, noverlap=512, db_range=90,
-                                     cmap='gray', khz_lims=[0, 10], save_path="./temp"):
+def generate_prediction_results(seg_size, wav, sr, preds, total_scores,
+                                nperseg=1024, noverlap=512, db_range=90,
+                                cmap='gray', khz_lims=[0, 10], save_path="./temp"):
+    """
+    Generates and saves prediction results including spectrogram images and audio segments.
+
+    This function takes waveform data, its sample rate, predictions, and total scores, and generates
+    spectrogram images highlighting the segments where predictions are positive. It also saves 
+    these identified segments as separate audio files. The function uses matplotlib for generating 
+    spectrogram images and librosa for audio processing.
+
+    Args:
+    - seg_size (int): Size of each segment in the waveform data.
+    - wav (numpy.ndarray): The waveform data as a numpy array.
+    - sr (int): Sample rate of the waveform data.
+    - preds (numpy.ndarray): An array of binary predictions for each segment.
+    - total_scores (numpy.ndarray): An array of total scores corresponding to each segment.
+    - save_path (str, optional): The base path where the spectrogram and segments are saved. Defaults to "./temp".
+
+    The function creates a directory for segments, generates a full spectrogram of the waveform, 
+    and for each segment where the prediction is positive, it overlays the segment on the spectrogram, 
+    saves the segment as an image, and extracts and saves the corresponding audio segment as a WAV file.
+    """
 
     # Create a directory for segments and remove any existing segments.
     seg_folder = os.path.join(save_path, "segs")
@@ -147,83 +167,16 @@ def generate_prediction_results_maad(seg_size, wav, sr, preds, total_scores,
         p = preds[i]
         s = total_scores[i][1]
         if p == 1:
-            ax.add_patch(Rectangle((seg_size * i, 0), seg_size, 64, linewidth=2, facecolor="orange",
+            ax.add_patch(Rectangle((seg_size * i, 0), seg_size, khz_lims[1], linewidth=2, facecolor="orange",
                                    edgecolor="red", alpha=0.25))
             ax.text(seg_size * i + 0.3, khz_lims[1] - 0.7, "Seg #{}".format(seg_counter), c="red", fontsize=15)
             ax.text(seg_size * i + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(s*100), c="red", fontsize=15)
-            bbox = Bbox([[seg_size * i, 0],[seg_size * (i + 1), 64]])
+            bbox = Bbox([[seg_size * i, 0],[seg_size * (i + 1), khz_lims[1]]])
             bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
             fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
-                                                                                  seg_size * i,
-                                                                                  seg_size * (i + 1),
-                                                                                  s*100),
-                        bbox_inches=bbox)
-            sf.write(os.path.join(seg_folder, "AudSeg_{}_{}_{}_{:.2f}.wav").format(seg_counter,
-                                                                               seg_size * i, 
-                                                                               seg_size * (i + 1),
-                                                                               s*100),
-                     wav[seg_size*i*sr : seg_size*(i+1)*sr], sr)
-            seg_counter += 1
-
-    ax.set(xlabel=None)
-    ax.tick_params(axis='x', which="major", labelsize=17)
-
-    print("Saving figure..")
-    plt.savefig(os.path.join(save_path, "full_spec.png"), bbox_inches="tight")  
-
-# %%
-def generate_prediction_results(seg_size, wav, sr, preds, total_scores, save_path="./temp"):
-    """
-    Generates and saves prediction results including spectrogram images and audio segments.
-
-    This function takes waveform data, its sample rate, predictions, and total scores, and generates
-    spectrogram images highlighting the segments where predictions are positive. It also saves 
-    these identified segments as separate audio files. The function uses matplotlib for generating 
-    spectrogram images and librosa for audio processing.
-
-    Args:
-    - seg_size (int): Size of each segment in the waveform data.
-    - wav (numpy.ndarray): The waveform data as a numpy array.
-    - sr (int): Sample rate of the waveform data.
-    - preds (numpy.ndarray): An array of binary predictions for each segment.
-    - total_scores (numpy.ndarray): An array of total scores corresponding to each segment.
-    - save_path (str, optional): The base path where the spectrogram and segments are saved. Defaults to "./temp".
-
-    The function creates a directory for segments, generates a full spectrogram of the waveform, 
-    and for each segment where the prediction is positive, it overlays the segment on the spectrogram, 
-    saves the segment as an image, and extracts and saves the corresponding audio segment as a WAV file.
-    """
-    # Create a directory for segments and remove any existing segments.
-    seg_folder = os.path.join(save_path, "segs")
-    shutil.rmtree(seg_folder, ignore_errors=True) 
-    os.makedirs(seg_folder, exist_ok=True)
-
-    matplotlib.use("Agg")
-
-    wav = wav.numpy()
-    # Compute the mel spectrogram of the waveform.
-    mel = librosa.feature.melspectrogram(y=wav, sr=sr, n_mels=64)
-    mel_db = librosa.power_to_db(mel, ref=np.max)
-
-    fig, ax = plt.subplots(figsize=(30, 5))
-
-    librosa.display.specshow(mel_db, sr=sr, x_axis="time", ax=ax)
-    # Iterate over the predictions and overlay the segments on the spectrogram.
-    seg_counter = 0
-    for i in range(len(preds)):
-        p = preds[i]
-        s = total_scores[i][1]
-        if p == 1:
-            ax.add_patch(Rectangle((seg_size * i, 0), seg_size, 64, linewidth=2, facecolor="orange",
-                                   edgecolor="red", alpha=0.25))
-            ax.text(seg_size * i + 0.3, 58, "Seg #{}".format(seg_counter), c="red", fontsize=20)
-            ax.text(seg_size * i + 0.3, 52, "Conf: {:.2f}".format(s*100), c="red", fontsize=20)
-            bbox = Bbox([[seg_size * i, 0],[seg_size * (i + 1), 64]])
-            bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
-                                                                                  seg_size * i,
-                                                                                  seg_size * (i + 1),
-                                                                                  s*100),
+                                                                                      seg_size * i,
+                                                                                      seg_size * (i + 1),
+                                                                                      s*100),
                         bbox_inches=bbox)
             sf.write(os.path.join(seg_folder, "AudSeg_{}_{}_{}_{:.2f}.wav").format(seg_counter,
                                                                                seg_size * i, 
@@ -279,7 +232,7 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
     print("Outputing figures..")
 
     save_path = "./temp"
-    generate_prediction_results_maad(inf_dset.seg_size, wav, sr, preds, total_scores,
+    generate_prediction_results(inf_dset.seg_size, wav, sr, preds, total_scores,
                                 save_path=save_path)
 
     print('Done.')
@@ -290,7 +243,9 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
             gr.Text("Please click the Detect button for possible call detections.", label="Instruction:", visible=True)]
 
 # %%
-def generate_validation_segs(wav_path, file_ann, save_path="./temp"):
+def generate_validation_segs(wav_path, file_ann, 
+                             nperseg=1024, noverlap=512, db_range=90,
+                             cmap='gray', khz_lims=[0, 10], save_path="./temp"):
     """
     Generates and saves validation segments as images and audio files.
 
@@ -320,12 +275,18 @@ def generate_validation_segs(wav_path, file_ann, save_path="./temp"):
 
     wav = wav.numpy()
     # Compute the mel spectrogram of the waveform.
-    mel = librosa.feature.melspectrogram(y=wav, sr=sr, n_mels=64)
-    mel_db = librosa.power_to_db(mel, ref=np.max)
+    Sxx, _, _, ext = sound.spectrogram(wav, sr, nperseg=nperseg, noverlap=noverlap,
+                                       flims=[khz_lims[0] * 1000, khz_lims[1] * 1000])
+    ext[-1] = khz_lims[1]
+    Sxx_db = util.power2dB(Sxx, db_range, 0)
 
     fig, ax = plt.subplots(figsize=(30, 5))
 
-    librosa.display.specshow(mel_db, sr=sr, x_axis="time", ax=ax)
+    ax.imshow(Sxx_db, extent=ext, origin="lower", cmap=cmap, 
+              vmin=None, vmax=None)
+    ax.axis("tight")
+    fig.tight_layout()
+
     # Iterate over the annotations and overlay the segments on the spectrogram.
     for i in range(len(file_ann)):
 
@@ -333,11 +294,11 @@ def generate_validation_segs(wav_path, file_ann, save_path="./temp"):
         ed = file_ann["end_time(s)"].values[i]
         conf = file_ann["detection_conf"].values[i]
 
-        ax.add_patch(Rectangle((st, 0), ed - st, 64, linewidth=2, facecolor="orange",
+        ax.add_patch(Rectangle((st, 0), ed - st, khz_lims[1], linewidth=2, facecolor="orange",
                                edgecolor="red", alpha=0.25))
-        ax.text(st + 0.3, 58, "Seg #{}".format(i), c="red", fontsize=20)
-        ax.text(st + 0.3, 52, "Conf: {:.2f}".format(conf), c="red", fontsize=20)
-        bbox = Bbox([[st, 0],[ed, 64]])
+        ax.text(st + 0.3, khz_lims[1] - 0.7, "Seg #{}".format(i), c="red", fontsize=15)
+        ax.text(st + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(conf), c="red", fontsize=15)
+        bbox = Bbox([[st, 0],[ed, khz_lims[1]]])
         bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
         fig.savefig(os.path.join(seg_folder, "ValImgSeg_{}.png").format(i),
                     bbox_inches=bbox)
@@ -454,7 +415,7 @@ class AnnLogger():
         return [gr.Column(visible=True),
                 gr.Accordion("Loading configurations", open=False),
                 gr.Text(self.current_file, visible=False),
-                gr.Audio(self.current_file, label=self.current_file),]
+                gr.Audio(self.current_file, label=self.current_file, visible=True)]
     
     def start_seg_annotation(self, current_file):
         """
@@ -501,7 +462,8 @@ class AnnLogger():
         return [gr.Column(visible=False),
                 gr.Column(visible=True),
                 gr.Text(self.ann_file, 
-                        label="Annotation saved to the following path, please close the annotation app.")]
+                        label="Annotation saved to the following path, please close the annotation app.",
+                        visible=True)]
 
     def next_audio_file(self):
         """
