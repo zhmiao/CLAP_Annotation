@@ -3,6 +3,8 @@ import gradio as gr
 from utils import *
 from species_list import SPECIES_LIST
 
+import random
+
 MAX_OUTPUT_ROWS = 100
 
 class Welcome(gr.Blocks):
@@ -14,6 +16,270 @@ class Welcome(gr.Blocks):
         with self:
             gr.Markdown("# Bioacoustics Annotation Tool Powered by CLAP!")
             gr.Markdown("## Please choose a tab to start!")
+
+class PromptLogger():
+    """
+    A logger class for handling the annotation process of bioacoustic data.
+
+    Attributes:
+    - tgt_files: List of target files available for annotation.
+    - current_file: Currently selected file for annotation.
+    - img_segs: List of image segment paths.
+    - aud_segs: List of audio segment paths.
+    - ann_file: File path for saving annotations.
+    - annotations: File handle for the annotation file.
+    """
+    def __init__(self):
+        """
+        Initializes the annotation logger with a counter and segment path.
+
+        Args:
+        - initial_counter (int): Initial value of the file counter. Defaults to 0.
+        - seg_path (str): Path to the directory where segments are stored. Defaults to "./temp/segs".
+        """
+        self.tgt_files = None
+        self.current_file = None 
+
+        self.prompt_path = None 
+        self.img_segs = []
+        self.aud_segs = []
+        self.ann_file = None
+        self.annotations = None
+
+    def load_data(self, data_root_path):
+        """
+        Loads the data from the specified root path and prepares it for annotation.
+
+        Args:
+        - data_root_path (str): The root path where the data (audio files) is located.
+
+        Returns:
+        - List containing Gradio components to display available files and annotation path.
+        """
+        # Load the files from the directory
+        tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        self.tgt_files = tgt_files
+        # Display the available files and annotation path.
+        return [gr.Text("\n".join(self.tgt_files), lines=5, label="Available files:"),
+                gr.Column(visible=True),
+                gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:", info="Please change the directory here if necessary!")]
+
+    def load_sample_data(self, sample_num, seed=0):
+        random.seed(int(seed))
+        self.sample_files = random.sample(self.tgt_files, int(sample_num))
+        return [gr.Text("\n".join(self.sample_files), lines=5, label="Available files:"),
+                gr.Column(visible=True)]
+
+    def register_prompt_file(self, prompt_path, name):
+        """
+        Registers an annotation file to save the annotations.
+
+        Args:
+        - ann_path (str): Path where the annotation file will be saved.
+        - name (str): Name of the annotator.
+
+        Returns:
+        - List containing Gradio components to indicate successful registration.
+        """
+        # Set the annotation path and create the directory if it doesn't exist.
+        self.prompt_path = prompt_path
+        os.makedirs(self.prompt_path, exist_ok=True)
+        self.ann_file = os.path.join(self.prompt_path, "prompt_{}.csv".format(name))
+        self.prompts = {"positive": "", "negative": "", "sample_files": self.sample_files} 
+        return [gr.Text("Name Registered as {}.".format(name), label="Registration Successful!"),
+                gr.Button("Start prompting!", visible=True)]
+
+    def start_annotation(self):
+        """
+        Prepares and displays the Gradio interface for starting the annotation of the current audio file.
+
+        Returns:
+        - A list of Gradio components that constitute the interface for annotating the current audio file.
+          This includes a column for the annotation workspace, an accordion for configuration details, 
+          and the audio player for the current file.
+        """
+        return [gr.Column(visible=True),
+                gr.Accordion("Loading configurations", open=False),
+                gr.Text(self.current_file, visible=False),
+                gr.Audio(self.current_file, label=self.current_file, visible=True)]
+    
+    def start_seg_annotation(self, current_file):
+        """
+        Begins annotation for a specific segment of the current audio file.
+
+        Args:
+        - current_file (str): The path to the current audio file being annotated.
+
+        Returns:
+        - A list of Gradio components for segment annotation including an image of the spectrogram 
+          segment, the corresponding audio segment, and a dropdown for species selection.
+        """
+        # Open the annotation file for writing and set the segment counter to 0.
+        try:
+            self.annotations = open(self.ann_file, "a")
+            self.seg_counter = 0
+            # Retrieve the image and audio segments for the current file.
+            self.img_segs = sorted(glob(os.path.join(self.seg_path, "*.png")))
+            self.aud_segs = sorted(glob(os.path.join(self.seg_path, "*.wav")))
+            # Load the first segment for annotation.
+            img_seg = self.img_segs[self.seg_counter]
+            aud_seg = self.aud_segs[self.seg_counter]
+            # Return the Gradio components for segment annotation.
+            return [gr.Image(img_seg, label="Spectrogram Seg:"),
+                    gr.Audio(aud_seg, label="Audio Seg:"),
+                    gr.Column(visible=True),
+                    gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None),
+                    gr.Text("Please select a category in the dropdown menu.", label="Instruction:")]
+        except:
+            return [gr.Image(),
+                    gr.Audio(),
+                    gr.Column(visible=False),
+                    gr.Dropdown(),
+                    gr.Text("NO DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
+
+    def end_annotation(self):
+        """
+        Finalizes the annotation process for the current file.
+
+        Returns:
+        - A list of Gradio components indicating the completion of the annotation process 
+          and the path where annotations are saved.
+        """
+        return [gr.Column(visible=False),
+                gr.Column(visible=True),
+                gr.Text(self.ann_file, 
+                        label="Annotation saved to the following path, please close the annotation app.",
+                        visible=True)]
+
+    def next_audio_file(self):
+        """
+        Proceeds to the next audio file for annotation.
+
+        Returns:
+        - A list of Gradio components for the next audio file, or a message indicating no more files.
+        """
+        try:
+            self.counter += 1
+            self.current_file = self.tgt_files[self.counter]
+            return [gr.Text(self.current_file, visible=False),
+                    gr.Audio(self.current_file, label=self.current_file),
+                    gr.Text("Click Detect button for predictions.",
+                            label="Number of detectect positive sounds:"),
+                    gr.Column(visible=False),
+                    gr.Column(visible=True), gr.Column(visible=True),
+                    gr.Button("Next Audio", visible=True), gr.Button(visible=False),
+                    gr.Text("Please click the Detect button for possible call detections.", label="Instruction:", visible=False)]
+        except:
+            return [gr.Text("No more files to annotate!", visible=True, label="IMPORTANT INFO:"),
+                    gr.Audio(visible=False),
+                    gr.Text(visible=False),
+                    gr.Column(visible=False), 
+                    gr.Column(visible=False), 
+                    gr.Column(visible=False),
+                    gr.Button(visible=False),
+                    gr.Button("Submit", visible=True),
+                    gr.Text(visible=False)]
+
+    def next_segment(self, category):
+        """
+        Proceeds to the next segment for annotation within the current audio file.
+
+        Args:
+        - category (str): The selected category for the current segment.
+
+        Returns:
+        - A list of Gradio components for the next segment, or a message indicating no more segments.
+        """
+        try:
+            st, ed, conf = self.img_segs[self.seg_counter].replace(".png",'').split('_')[-3:]
+            self.annotations.write("{},{},{},{},{}\n".format(self.current_file, st, ed, category, conf))
+            self.seg_counter += 1
+            img_seg = self.img_segs[self.seg_counter]
+            aud_seg = self.aud_segs[self.seg_counter]
+            return [gr.Image(img_seg, label="Spectrogram Seg:"),
+                    gr.Audio(aud_seg, label="Audio Seg:"),
+                    gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None),
+                    gr.Column(visible=True),
+                    gr.Text("Please select a category in the dropdown menu.", label="Instruction:")]
+        except:
+            self.seg_counter = 0
+            # self.current_file = None
+            self.annotations.close()
+            return [gr.Image(),
+                    gr.Audio(),
+                    gr.Dropdown(),
+                    gr.Column(visible=False),
+                    gr.Text("NO MORE DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
+    
+class PromptTest(gr.Blocks):
+    def __init__(self, prompt_logger):
+        super().__init__()
+        self.prompt_logger = prompt_logger
+        self.build_blocks()
+    
+    def build_blocks(self):
+        with self:
+            with gr.Accordion("Configurations", open=True) as load_acc:
+
+                data_root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                data_fetch_but = gr.Button("Get data from the root directory.")
+
+                # Gradio components to show the available files and the path to save the annotation file
+
+                with gr.Column(visible=False) as data_config_col:
+                    with gr.Accordion("Open to see all available files.", open=False):
+                        data_file_list = gr.Text("", lines=5, label="Available files:")
+
+                    prompt_path = gr.Text("", label="Initial prompt file will be saved to:", info="Please change the directory here if necessary!")
+
+                    with gr.Row():
+                        num_file = gr.Text("3", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
+                        random_seed = gr.Text("0", label="Random seed:", interactive=True)
+
+                    random_data_fetch_but = gr.Button("Get sample data for prompting.")
+
+                with gr.Column(visible=False) as model_loading_col:
+                    sample_file_list = gr.Text("", lines=5, label="Sampled files for prompting:")
+                    # Model selection
+                    det_drop = gr.Dropdown(
+                        ["CLAP_Jan23"],
+                        label="Select an audio-language model",
+                        info="Will add more detection models in the future!",
+                        value="CLAP_Jan23"
+                    )
+                    load_but = gr.Button("Click to load CLAP")
+                    load_out = gr.Text("CLAP is not loaded yet!!", label="Loaded CLAP model:")
+
+
+                with gr.Column(visible=False) as register_col:
+                    with gr.Row():
+                        prompt_name = gr.Textbox(lines=1, label="Please put your name here and register before prompting:",
+                                                 interactive=True)
+                        prompt_name_reg_but = gr.Button("Register Your Name", scale=0.5)
+                    start_but = gr.Button("Start prompting!", visible=False)
+
+            # %% # Annotation buttons and actions
+            # Load the data
+            data_fetch_but.click(self.prompt_logger.load_data, 
+                                 inputs=data_root_path, 
+                                 outputs=[data_file_list, data_config_col, prompt_path])
+
+            # Get sample data for prompting
+            random_data_fetch_but.click(self.prompt_logger.load_sample_data, 
+                                         inputs=[num_file, random_seed], 
+                                         outputs=[sample_file_list, model_loading_col])
+            # Load the model
+            load_but.click(load_models, 
+                           inputs=det_drop, 
+                           outputs=[load_out, register_col])
+            # Register the name
+            prompt_name_reg_but.click(self.prompt_logger.register_prompt_file, 
+                                   inputs=[prompt_path, prompt_name], 
+                                   outputs=[prompt_name, start_but])
+            # Start the annotation
+            # start_but.click(self.prompt_logger.start_prompting, 
+            #                 outputs=[ann_col, load_acc, cur_file_path, cur_file])
+
     
 class Annotation(gr.Blocks):
 
