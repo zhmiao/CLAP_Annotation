@@ -29,7 +29,7 @@ class PromptLogger():
     - ann_file: File path for saving annotations.
     - annotations: File handle for the annotation file.
     """
-    def __init__(self):
+    def __init__(self, max_sample=10):
         """
         Initializes the annotation logger with a counter and segment path.
 
@@ -37,10 +37,15 @@ class PromptLogger():
         - initial_counter (int): Initial value of the file counter. Defaults to 0.
         - seg_path (str): Path to the directory where segments are stored. Defaults to "./temp/segs".
         """
+        
+
         self.tgt_files = None
         self.current_file = None 
 
         self.prompt_path = None 
+        self.max_sample = max_sample
+        self.sample_num = 0
+
         self.img_segs = []
         self.aud_segs = []
         self.ann_file = None
@@ -65,8 +70,16 @@ class PromptLogger():
                 gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:", info="Please change the directory here if necessary!")]
 
     def load_sample_data(self, sample_num, seed=0):
+        self.sample_num = sample_num
         random.seed(int(seed))
         self.sample_files = random.sample(self.tgt_files, int(sample_num))
+        save_path = "./temp/prompting_sample_files"
+        shutil.rmtree(save_path, ignore_errors=True) 
+        os.makedirs(save_path, exist_ok=True)
+        for f in self.sample_files:
+            wav, sr = torchaudio.load(f)
+            wav = wav.reshape(-1)
+            generate_spectrogram_results(wav, sr, prefix="{}_".format(f.split('/')[-1]), save_path=save_path)
         return [gr.Text("\n".join(self.sample_files), lines=5, label="Available files:"),
                 gr.Column(visible=True)]
 
@@ -89,7 +102,7 @@ class PromptLogger():
         return [gr.Text("Name Registered as {}.".format(name), label="Registration Successful!"),
                 gr.Button("Start prompting!", visible=True)]
 
-    def start_annotation(self):
+    def start_prompting(self):
         """
         Prepares and displays the Gradio interface for starting the annotation of the current audio file.
 
@@ -99,9 +112,19 @@ class PromptLogger():
           and the audio player for the current file.
         """
         return [gr.Column(visible=True),
-                gr.Accordion("Loading configurations", open=False),
-                gr.Text(self.current_file, visible=False),
-                gr.Audio(self.current_file, label=self.current_file, visible=True)]
+                gr.Accordion("Loading configurations", open=False)]
+
+    def populate_audio(self, file_list):
+        file_list = file_list.split("\n")
+        populated_path = [gr.Audio(p, visible=True, label=p, min_width=1200) for p in file_list]
+        return populated_path + [gr.Audio(visible=False)] * (self.max_sample - len(file_list))
+
+    def populate_image(self, file_list):
+        file_list = file_list.split("\n")
+        populated_path = [gr.Image(os.path.join("./temp/prompting_sample_files",
+                                                p.split('/')[-1]+"_full_spec.png"), visible=True, label=p, height=192)
+                          for p in file_list]
+        return populated_path + [gr.Image(visible=False)] * (self.max_sample - len(file_list))
     
     def start_seg_annotation(self, current_file):
         """
@@ -211,10 +234,13 @@ class PromptLogger():
                     gr.Column(visible=False),
                     gr.Text("NO MORE DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
     
+
+
 class PromptTest(gr.Blocks):
-    def __init__(self, prompt_logger):
+    def __init__(self, prompt_logger, max_sample=10):
         super().__init__()
         self.prompt_logger = prompt_logger
+        self.max_sample = max_sample
         self.build_blocks()
     
     def build_blocks(self):
@@ -233,13 +259,14 @@ class PromptTest(gr.Blocks):
                     prompt_path = gr.Text("", label="Initial prompt file will be saved to:", info="Please change the directory here if necessary!")
 
                     with gr.Row():
-                        num_file = gr.Text("3", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
+                        num_file = gr.Text("2", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
                         random_seed = gr.Text("0", label="Random seed:", interactive=True)
+
+                    sample_file_list = gr.Text("Click the button to get sample files.", lines=1, label="Sampled files for prompting:")
 
                     random_data_fetch_but = gr.Button("Get sample data for prompting.")
 
                 with gr.Column(visible=False) as model_loading_col:
-                    sample_file_list = gr.Text("", lines=5, label="Sampled files for prompting:")
                     # Model selection
                     det_drop = gr.Dropdown(
                         ["CLAP_Jan23"],
@@ -250,13 +277,40 @@ class PromptTest(gr.Blocks):
                     load_but = gr.Button("Click to load CLAP")
                     load_out = gr.Text("CLAP is not loaded yet!!", label="Loaded CLAP model:")
 
-
                 with gr.Column(visible=False) as register_col:
                     with gr.Row():
                         prompt_name = gr.Textbox(lines=1, label="Please put your name here and register before prompting:",
                                                  interactive=True)
                         prompt_name_reg_but = gr.Button("Register Your Name", scale=0.5)
                     start_but = gr.Button("Start prompting!", visible=False)
+
+            # with gr.Column(visible=False) as prompt_col:
+            with gr.Column(visible=False) as prompt_col:
+                # Audio file path
+
+                with gr.Row():
+                    with gr.Column():
+                        spec_list = []
+                        for _ in range(self.max_sample):
+                            spec_list.append(gr.Image(visible=False))
+                    with gr.Column():
+                        audio_list = []
+                        for _ in range(self.max_sample):
+                            audio_list.append(gr.Audio(visible=False))
+                
+                sample_file_list.change(self.prompt_logger.populate_audio, sample_file_list, audio_list)
+                sample_file_list.change(self.prompt_logger.populate_image, sample_file_list, spec_list)
+
+                # Positive and negative sample selectio
+                with gr.Row():
+                    det_pos_prompt = gr.Text("birds chirping;", label="Positive Prompts:", interactive=True)
+                    det_neg_prompt = gr.Text("noise;", label="Negative Prompts:", interactive=True)
+                # Detection confidence threshold
+                det_conf = gr.Slider(0, 1, label="Detection Confidence Threshold", value=0.5)
+                det_but = gr.Button("Detect!")
+
+                # submit_but = gr.Button("Submit", visible=False)
+                # submit_text = gr.Text("", visible=False)
 
             # %% # Annotation buttons and actions
             # Load the data
@@ -276,10 +330,9 @@ class PromptTest(gr.Blocks):
             prompt_name_reg_but.click(self.prompt_logger.register_prompt_file, 
                                    inputs=[prompt_path, prompt_name], 
                                    outputs=[prompt_name, start_but])
-            # Start the annotation
-            # start_but.click(self.prompt_logger.start_prompting, 
-            #                 outputs=[ann_col, load_acc, cur_file_path, cur_file])
-
+            # Start prompting
+            start_but.click(self.prompt_logger.start_prompting, 
+                            outputs=[prompt_col, load_acc])
     
 class Annotation(gr.Blocks):
 
