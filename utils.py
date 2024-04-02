@@ -8,6 +8,7 @@ import pandas as pd
 import librosa
 import soundfile as sf
 from maad import sound, util
+from tqdm import tqdm
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -21,7 +22,7 @@ import torchaudio
 import gradio as gr
 
 from CLAP.CLAPWrapper import CLAPWrapper
-from CLAP.dataset.datasets import Inference_DS
+from CLAP.dataset.datasets import Inference_DS, Batch_Inference_DS
 
 from species_list import SPECIES_LIST
 
@@ -51,10 +52,10 @@ def load_models(model_name):
     weights_path = 'weights/{}.pth'.format(model_name)
     
     print("Loading CLAP model..")
-    # clap = CLAPWrapper(weights_path, use_cuda=True)
-    # # Load the weights
-    # clap.load_clap()
-    clap = None
+    clap = CLAPWrapper(weights_path, use_cuda=True)
+    # Load the weights
+    clap.load_clap()
+    # clap = None
     print("CLAP model loaded!")
     return ['Loaded CLAP model from {}'.format(weights_path),
             gr.Column(visible=True)]
@@ -118,7 +119,8 @@ def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, thet
 # %%
 def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_scores=None,
                                  nperseg=1024, noverlap=512, db_range=90,
-                                 cmap='gray', khz_lims=[0, 10], prefix=None, save_path="./temp"):
+                                 cmap='gray', khz_lims=[0, 10], prefix="full", save_path="./temp",
+                                 output_segs=True):
     """
     Generates and saves prediction results including spectrogram images and audio segments.
 
@@ -141,7 +143,7 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
     """
 
     # Create a directory for segments and remove any existing segments.
-    if seg_size:
+    if output_segs:
         seg_folder = os.path.join(save_path, "segs")
         shutil.rmtree(seg_folder, ignore_errors=True) 
         os.makedirs(seg_folder, exist_ok=True)
@@ -165,7 +167,7 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
     ax.axis("tight")
     fig.tight_layout()
 
-    if preds:
+    if preds is not None:
         # Iterate over the predictions and overlay the segments on the spectrogram.
         seg_counter = 0
         for i in range(len(preds)):
@@ -178,23 +180,77 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
                 ax.text(seg_size * i + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(s*100), c="red", fontsize=15)
                 bbox = Bbox([[seg_size * i, 0],[seg_size * (i + 1), khz_lims[1]]])
                 bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
-                fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
-                                                                                          seg_size * i,
-                                                                                          seg_size * (i + 1),
-                                                                                          s*100),
-                            bbox_inches=bbox)
-                sf.write(os.path.join(seg_folder, "AudSeg_{}_{}_{}_{:.2f}.wav").format(seg_counter,
-                                                                                   seg_size * i, 
-                                                                                   seg_size * (i + 1),
-                                                                                   s*100),
-                         wav[seg_size*i*sr : seg_size*(i+1)*sr], sr)
+                
+                if output_segs:
+                    fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
+                                                                                              seg_size * i,
+                                                                                              seg_size * (i + 1),
+                                                                                              s*100),
+                                bbox_inches=bbox)
+                    sf.write(os.path.join(seg_folder, "AudSeg_{}_{}_{}_{:.2f}.wav").format(seg_counter,
+                                                                                       seg_size * i, 
+                                                                                       seg_size * (i + 1),
+                                                                                       s*100),
+                             wav[seg_size*i*sr : seg_size*(i+1)*sr], sr)
                 seg_counter += 1
 
     ax.set(xlabel=None)
     ax.tick_params(axis='x', which="major", labelsize=17)
 
-    print("Saving figure..")
-    plt.savefig(os.path.join(save_path, "{}full_spec.png".format(prefix)), bbox_inches="tight")  
+    print("Saving figure {}..".format(prefix))
+    plt.savefig(os.path.join(save_path, "{}_spec.png".format(prefix)), bbox_inches="tight")  
+
+
+# %%
+def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.5,
+                          output_spec=True, output_det=False, annotator=None, save_path='./temp'):
+
+    if isinstance(wav_list, str):
+        wav_list = wav_list.split("\n")
+
+    # Split the wav into windows of 6 seconds.
+    inf_dset = Batch_Inference_DS(wav_list)
+
+    # Add the segments to the DataLoader.
+    inf_dl = DataLoader(
+                inf_dset, batch_size=10, shuffle=False, 
+                pin_memory=True, num_workers=4, drop_last=False
+        )
+
+    neg_prompts = neg_prompts.rstrip(';').split(';')
+    pos_prompts = pos_prompts.rstrip(';').split(';')
+    neg_n = len(neg_prompts)
+    pos_n = len(pos_prompts)
+    classes = neg_prompts + pos_prompts
+    print(classes)
+    prompt = "this is a sound of "
+    class_prompts = [prompt + x for x in classes]
+
+    print("Computing similarities..")
+    total_scores, preds = compute_similarity(clap, inf_dl, class_prompts,
+                                             neg_n=neg_n, pos_n=pos_n, theta=theta)
+
+    if output_spec:
+        print("Outputing figures..")
+        shutil.rmtree(save_path, ignore_errors=True) 
+
+        for f in np.unique(inf_dset.data):
+            wav, sr = torchaudio.load(f)
+            wav = wav.reshape(-1)
+            preds_f = preds[np.array(inf_dset.data) == f]
+            scores_f = total_scores[np.array(inf_dset.data) == f]
+            generate_spectrogram_results(wav, sr, inf_dset.seg_size, preds_f, scores_f,
+                                         save_path=save_path, prefix=f.split('/')[-1].replace(".wav", ''),
+                                         output_segs=False)
+    if output_det:
+        print("Outputing detection results..")
+        with open(os.path.join(save_path, "det_preds_seg_{}_{}.csv".format(inf_dset.seg_size, annotator)), 'w') as det_preds:
+            det_preds.write("filename,start_time(s),end_time(s),species,detection_conf\n")
+            for f, st, p, s in zip(inf_dset.data, inf_dset.sts, preds, total_scores):
+                if p == 1:
+                    det_preds.write("{},{},{},{},{}\n".format(f, st, st+inf_dset.seg_size, "None", s))
+
+    print('Done.')
 
 # %%
 def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0.5):

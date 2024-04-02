@@ -1,4 +1,4 @@
-
+import json
 import gradio as gr
 from utils import *
 from species_list import SPECIES_LIST
@@ -46,10 +46,8 @@ class PromptLogger():
         self.max_sample = max_sample
         self.sample_num = 0
 
-        self.img_segs = []
-        self.aud_segs = []
-        self.ann_file = None
-        self.annotations = None
+        self.prompt_file = None
+        self.annotator = None
 
     def load_data(self, data_root_path):
         """
@@ -67,7 +65,8 @@ class PromptLogger():
         # Display the available files and annotation path.
         return [gr.Text("\n".join(self.tgt_files), lines=5, label="Available files:"),
                 gr.Column(visible=True),
-                gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:", info="Please change the directory here if necessary!")]
+                gr.Text("{}/annotations".format(data_root_path), label="Prompt information of this round will be saved to:",
+                        info="Please change the directory here if necessary!", interactive=True)]
 
     def load_sample_data(self, sample_num, seed=0):
         self.sample_num = sample_num
@@ -79,7 +78,7 @@ class PromptLogger():
         for f in self.sample_files:
             wav, sr = torchaudio.load(f)
             wav = wav.reshape(-1)
-            generate_spectrogram_results(wav, sr, prefix="{}_".format(f.split('/')[-1]), save_path=save_path)
+            generate_spectrogram_results(wav, sr, prefix="{}".format(f.split('/')[-1].replace(".wav", '')), save_path=save_path)
         return [gr.Text("\n".join(self.sample_files), lines=5, label="Available files:"),
                 gr.Column(visible=True)]
 
@@ -95,9 +94,9 @@ class PromptLogger():
         - List containing Gradio components to indicate successful registration.
         """
         # Set the annotation path and create the directory if it doesn't exist.
+        self.annotator = name
         self.prompt_path = prompt_path
         os.makedirs(self.prompt_path, exist_ok=True)
-        self.ann_file = os.path.join(self.prompt_path, "prompt_{}.csv".format(name))
         self.prompts = {"positive": "", "negative": "", "sample_files": self.sample_files} 
         return [gr.Text("Name Registered as {}.".format(name), label="Registration Successful!"),
                 gr.Button("Start prompting!", visible=True)]
@@ -112,7 +111,7 @@ class PromptLogger():
           and the audio player for the current file.
         """
         return [gr.Column(visible=True),
-                gr.Accordion("Loading configurations", open=False)]
+                gr.Accordion("Loading configurations.", open=False)]
 
     def populate_audio(self, file_list):
         file_list = file_list.split("\n")
@@ -121,120 +120,51 @@ class PromptLogger():
 
     def populate_image(self, file_list):
         file_list = file_list.split("\n")
+        
         populated_path = [gr.Image(os.path.join("./temp/prompting_sample_files",
-                                                p.split('/')[-1]+"_full_spec.png"), visible=True, label=p, height=192)
+                                                p.split('/')[-1].replace(".wav", '')+"_spec.png"), visible=True, label=p, height=192)
                           for p in file_list]
         return populated_path + [gr.Image(visible=False)] * (self.max_sample - len(file_list))
     
-    def start_seg_annotation(self, current_file):
-        """
-        Begins annotation for a specific segment of the current audio file.
+    def update_image(self, wav_list, neg_prompts, pos_prompts, theta):
+        batch_audio_detection(wav_list=wav_list, neg_prompts=neg_prompts, pos_prompts=pos_prompts, theta=theta, 
+                              output_spec=True, output_det=False,
+                              save_path="./temp/prompting_sample_files")
+        return self.populate_image(wav_list)
 
-        Args:
-        - current_file (str): The path to the current audio file being annotated.
-
-        Returns:
-        - A list of Gradio components for segment annotation including an image of the spectrogram 
-          segment, the corresponding audio segment, and a dropdown for species selection.
-        """
-        # Open the annotation file for writing and set the segment counter to 0.
-        try:
-            self.annotations = open(self.ann_file, "a")
-            self.seg_counter = 0
-            # Retrieve the image and audio segments for the current file.
-            self.img_segs = sorted(glob(os.path.join(self.seg_path, "*.png")))
-            self.aud_segs = sorted(glob(os.path.join(self.seg_path, "*.wav")))
-            # Load the first segment for annotation.
-            img_seg = self.img_segs[self.seg_counter]
-            aud_seg = self.aud_segs[self.seg_counter]
-            # Return the Gradio components for segment annotation.
-            return [gr.Image(img_seg, label="Spectrogram Seg:"),
-                    gr.Audio(aud_seg, label="Audio Seg:"),
-                    gr.Column(visible=True),
-                    gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None),
-                    gr.Text("Please select a category in the dropdown menu.", label="Instruction:")]
-        except:
-            return [gr.Image(),
-                    gr.Audio(),
-                    gr.Column(visible=False),
-                    gr.Dropdown(),
-                    gr.Text("NO DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
-
-    def end_annotation(self):
-        """
-        Finalizes the annotation process for the current file.
-
-        Returns:
-        - A list of Gradio components indicating the completion of the annotation process 
-          and the path where annotations are saved.
-        """
-        return [gr.Column(visible=False),
+    def submission(self, data_root_path):
+        return [gr.Accordion("Prompting results.", open=False),
                 gr.Column(visible=True),
-                gr.Text(self.ann_file, 
-                        label="Annotation saved to the following path, please close the annotation app.",
-                        visible=True)]
+                gr.Column(visible=True),
+                gr.Text("{}/annotations".format(data_root_path), label="Prompt information of this round will be saved to:",
+                        info="Please change the directory here if necessary!", interactive=True),
+                gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:",
+                        info="Please change the directory here if necessary!", interactive=True)]
 
-    def next_audio_file(self):
-        """
-        Proceeds to the next audio file for annotation.
+    def command_gen(self, data_root, ann_path, prompt_path, sess_id, seed):
+        self.prompt_file = os.path.join(prompt_path, "prompt_{}_id_{}_seed_{}.json".format(self.annotator, sess_id, seed))
+        return gr.Text("python batch_detection.py --data_root {} --prompt {} --det_out {}".format(data_root, self.prompt_file, ann_path),
+                       label="If you are happy with that, please click on the Finish button and run the command in your terminal!",
+                       interactive=False)
 
-        Returns:
-        - A list of Gradio components for the next audio file, or a message indicating no more files.
-        """
-        try:
-            self.counter += 1
-            self.current_file = self.tgt_files[self.counter]
-            return [gr.Text(self.current_file, visible=False),
-                    gr.Audio(self.current_file, label=self.current_file),
-                    gr.Text("Click Detect button for predictions.",
-                            label="Number of detectect positive sounds:"),
-                    gr.Column(visible=False),
-                    gr.Column(visible=True), gr.Column(visible=True),
-                    gr.Button("Next Audio", visible=True), gr.Button(visible=False),
-                    gr.Text("Please click the Detect button for possible call detections.", label="Instruction:", visible=False)]
-        except:
-            return [gr.Text("No more files to annotate!", visible=True, label="IMPORTANT INFO:"),
-                    gr.Audio(visible=False),
-                    gr.Text(visible=False),
-                    gr.Column(visible=False), 
-                    gr.Column(visible=False), 
-                    gr.Column(visible=False),
-                    gr.Button(visible=False),
-                    gr.Button("Submit", visible=True),
-                    gr.Text(visible=False)]
+    def finish(self, command, neg_prompts, pos_prompts, theta):
+        prompt_info = {"pos_prompts": pos_prompts,
+                       "neg_prompts": neg_prompts, 
+                       "theta": theta}
 
-    def next_segment(self, category):
-        """
-        Proceeds to the next segment for annotation within the current audio file.
+        with open(self.prompt_file, "w") as f:
+            json.dump(prompt_info, f, indent=4)
 
-        Args:
-        - category (str): The selected category for the current segment.
-
-        Returns:
-        - A list of Gradio components for the next segment, or a message indicating no more segments.
-        """
-        try:
-            st, ed, conf = self.img_segs[self.seg_counter].replace(".png",'').split('_')[-3:]
-            self.annotations.write("{},{},{},{},{}\n".format(self.current_file, st, ed, category, conf))
-            self.seg_counter += 1
-            img_seg = self.img_segs[self.seg_counter]
-            aud_seg = self.aud_segs[self.seg_counter]
-            return [gr.Image(img_seg, label="Spectrogram Seg:"),
-                    gr.Audio(aud_seg, label="Audio Seg:"),
-                    gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None),
-                    gr.Column(visible=True),
-                    gr.Text("Please select a category in the dropdown menu.", label="Instruction:")]
-        except:
-            self.seg_counter = 0
-            # self.current_file = None
-            self.annotations.close()
-            return [gr.Image(),
-                    gr.Audio(),
-                    gr.Dropdown(),
-                    gr.Column(visible=False),
-                    gr.Text("NO MORE DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
-    
-
+        return [gr.Column(visible=False),
+                gr.Column(visible=False),
+                gr.Column(visible=False),
+                gr.Text(command,
+                        label="Prompt file is saved to `{}`.".format(self.prompt_file) +\
+                              "Please past the following command or " +\
+                              "click the Run Batch Detection button to run batch detection.",
+                        visible=True),
+                gr.Button("Run Batch Detection!", visible=True),
+                gr.Button(visible=False)]
 
 class PromptTest(gr.Blocks):
     def __init__(self, prompt_logger, max_sample=10):
@@ -245,72 +175,81 @@ class PromptTest(gr.Blocks):
     
     def build_blocks(self):
         with self:
-            with gr.Accordion("Configurations", open=True) as load_acc:
+            with gr.Column(visible=True) as conf_col:
+                with gr.Accordion("Configurations", open=True) as load_acc:
 
-                data_root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
-                data_fetch_but = gr.Button("Get data from the root directory.")
+                    data_root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                    data_fetch_but = gr.Button("Get data from the root directory.")
 
-                # Gradio components to show the available files and the path to save the annotation file
+                    # Gradio components to show the available files and the path to save the annotation file
 
-                with gr.Column(visible=False) as data_config_col:
-                    with gr.Accordion("Open to see all available files.", open=False):
-                        data_file_list = gr.Text("", lines=5, label="Available files:")
+                    with gr.Column(visible=False) as data_config_col:
+                        with gr.Accordion("Open to see all available files.", open=False):
+                            data_file_list = gr.Text("", lines=5, label="Available files:")
 
-                    prompt_path = gr.Text("", label="Initial prompt file will be saved to:", info="Please change the directory here if necessary!")
 
-                    with gr.Row():
-                        num_file = gr.Text("2", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
-                        random_seed = gr.Text("0", label="Random seed:", interactive=True)
+                        with gr.Row():
+                            num_file = gr.Text("2", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
+                            random_seed = gr.Text("0", label="Random seed:", interactive=True)
 
-                    sample_file_list = gr.Text("Click the button to get sample files.", lines=1, label="Sampled files for prompting:")
+                        sample_file_list = gr.Text("Click the button to get sample files.", lines=1, label="Sampled files for prompting:")
 
-                    random_data_fetch_but = gr.Button("Get sample data for prompting.")
+                        random_data_fetch_but = gr.Button("Get sample data for prompting.")
 
-                with gr.Column(visible=False) as model_loading_col:
-                    # Model selection
-                    det_drop = gr.Dropdown(
-                        ["CLAP_Jan23"],
-                        label="Select an audio-language model",
-                        info="Will add more detection models in the future!",
-                        value="CLAP_Jan23"
-                    )
-                    load_but = gr.Button("Click to load CLAP")
-                    load_out = gr.Text("CLAP is not loaded yet!!", label="Loaded CLAP model:")
+                    with gr.Column(visible=False) as model_loading_col:
+                        # Model selection
+                        det_drop = gr.Dropdown(
+                            ["CLAP_Jan23"],
+                            label="Select an audio-language model",
+                            info="Will add more detection models in the future!",
+                            value="CLAP_Jan23"
+                        )
+                        load_but = gr.Button("Click to load CLAP")
+                        load_out = gr.Text("CLAP is not loaded yet!!", label="Loaded CLAP model:")
 
-                with gr.Column(visible=False) as register_col:
-                    with gr.Row():
-                        prompt_name = gr.Textbox(lines=1, label="Please put your name here and register before prompting:",
-                                                 interactive=True)
-                        prompt_name_reg_but = gr.Button("Register Your Name", scale=0.5)
-                    start_but = gr.Button("Start prompting!", visible=False)
+                    with gr.Column(visible=False) as register_col:
+                        with gr.Row():
+                            prompt_name = gr.Textbox(lines=1, label="Please put your name here and register before prompting:",
+                                                     interactive=True)
+                            prompt_name_reg_but = gr.Button("Register Your Name", scale=0.5)
+                        start_but = gr.Button("Start prompting!", visible=False)
 
-            # with gr.Column(visible=False) as prompt_col:
             with gr.Column(visible=False) as prompt_col:
-                # Audio file path
+                with gr.Accordion("Prompting results.", open=True) as prompt_acc:
+                    # Audio file path
+                    with gr.Row():
+                        with gr.Column():
+                            spec_list = []
+                            for _ in range(self.max_sample):
+                                spec_list.append(gr.Image(visible=False))
+                        with gr.Column():
+                            audio_list = []
+                            for _ in range(self.max_sample):
+                                audio_list.append(gr.Audio(visible=False))
+                        sample_file_list.change(self.prompt_logger.populate_audio, sample_file_list, audio_list)
+                        sample_file_list.change(self.prompt_logger.populate_image, sample_file_list, spec_list)
 
-                with gr.Row():
-                    with gr.Column():
-                        spec_list = []
-                        for _ in range(self.max_sample):
-                            spec_list.append(gr.Image(visible=False))
-                    with gr.Column():
-                        audio_list = []
-                        for _ in range(self.max_sample):
-                            audio_list.append(gr.Audio(visible=False))
-                
-                sample_file_list.change(self.prompt_logger.populate_audio, sample_file_list, audio_list)
-                sample_file_list.change(self.prompt_logger.populate_image, sample_file_list, spec_list)
-
-                # Positive and negative sample selectio
-                with gr.Row():
+                    # Positive and negative sample selectio
                     det_pos_prompt = gr.Text("birds chirping;", label="Positive Prompts:", interactive=True)
                     det_neg_prompt = gr.Text("noise;", label="Negative Prompts:", interactive=True)
-                # Detection confidence threshold
-                det_conf = gr.Slider(0, 1, label="Detection Confidence Threshold", value=0.5)
-                det_but = gr.Button("Detect!")
+                    # Detection confidence threshold
+                    det_conf = gr.Slider(0, 1, label="Detection Confidence Threshold", value=0.5)
 
-                # submit_but = gr.Button("Submit", visible=False)
-                # submit_text = gr.Text("", visible=False)
+                    det_but = gr.Button("Detect!")
+
+                    submit_but = gr.Button("Submit prompts!")
+                
+            with gr.Column(visible=False) as prompt_final_col:
+                prompt_path = gr.Text("", label="Prompt information file will be saved to:", info="Please change the directory here if necessary!")
+                ann_path = gr.Text("", label="Batch detection file will be saved to:", info="Please change the directory here if necessary!")
+                prompt_sess_id = gr.Text("0", label="Prompt testing session id for reference:", info="Please change the session number here if necessary!")
+                command_text = gr.Text("Click Generate Detection Command button to generate batch detection commands.")
+                command_but = gr.Button("Generate Detection Command!")
+
+            with gr.Column(visible=False) as prompt_finish_col:
+                finish_text = gr.Text("", visible=False)
+                finish_but = gr.Button("Finish!")
+                batch_det_but = gr.Button(visible=False)
 
             # %% # Annotation buttons and actions
             # Load the data
@@ -333,6 +272,26 @@ class PromptTest(gr.Blocks):
             # Start prompting
             start_but.click(self.prompt_logger.start_prompting, 
                             outputs=[prompt_col, load_acc])
+
+            det_but.click(self.prompt_logger.update_image, 
+                          inputs=[sample_file_list, det_neg_prompt, det_pos_prompt, det_conf],
+                          outputs=spec_list)
+
+            submit_but.click(self.prompt_logger.submission,
+                             inputs=data_root_path,
+                             outputs=[prompt_acc, prompt_final_col, prompt_finish_col, prompt_path, ann_path])
+
+            command_but.click(self.prompt_logger.command_gen,
+                              inputs=[data_root_path, ann_path, prompt_path, prompt_sess_id, random_seed],
+                              outputs=command_text)
+
+            finish_but.click(self.prompt_logger.finish,
+                             inputs=[command_text, det_neg_prompt, det_pos_prompt, det_conf],
+                             outputs=[conf_col, prompt_col, prompt_final_col, finish_text, batch_det_but, finish_but])
+
+            # batch_det_but.click(self.prompt_logger.run_batch_detection,
+            #                     inputs=[data_file_list, det_neg_prompt, det_pos_prompt, det_conf,
+            #                             ann_path, prompt_sess_id, random_seed])
     
 class Annotation(gr.Blocks):
 
