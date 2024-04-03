@@ -2,6 +2,7 @@
 # %%
 import os
 import shutil
+import time
 from glob import glob
 import numpy as np
 import pandas as pd
@@ -61,7 +62,7 @@ def load_models(model_name):
             gr.Column(visible=True)]
 
 # %%
-def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, theta=0.5):
+def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, theta=0.5, progress="tqdm"):
     """
     Computes the similarity between audio embeddings and class text embeddings.
 
@@ -86,7 +87,23 @@ def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, thet
 
     total_scores = []
     # Iterate over the data loader to get audio embeddings and compute similarity.
-    for x in data_loader:
+    # for x in data_loader:
+
+    if progress == "tqdm":
+        progress = tqdm
+    elif progress == "gr":
+        gr_progress = gr.Progress()
+        gr_progress(0, desc="Starting..")
+        progress = gr_progress.tqdm
+
+    data_iter = iter(data_loader)
+
+    time.sleep(2)
+
+    # for i in progress.tqdm(range(len(data_loader))):
+    for i in progress(range(len(data_loader)), desc="Detection in process..."):
+
+        x = next(data_iter) 
         
         if torch.cuda.is_available():
             x = x.cuda()
@@ -203,7 +220,8 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
 
 # %%
 def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.5,
-                          output_spec=True, output_det=False, annotator=None, save_path='./temp'):
+                          output_spec=True, output_det=False, save_path='./temp',
+                          det_file="det.csv", progress="tqdm"):
 
     if isinstance(wav_list, str):
         wav_list = wav_list.split("\n")
@@ -228,7 +246,8 @@ def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.
 
     print("Computing similarities..")
     total_scores, preds = compute_similarity(clap, inf_dl, class_prompts,
-                                             neg_n=neg_n, pos_n=pos_n, theta=theta)
+                                             neg_n=neg_n, pos_n=pos_n, theta=theta,
+                                             progress=progress)
 
     if output_spec:
         print("Outputing figures..")
@@ -244,11 +263,11 @@ def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.
                                          output_segs=False)
     if output_det:
         print("Outputing detection results..")
-        with open(os.path.join(save_path, "det_preds_seg_{}_{}.csv".format(inf_dset.seg_size, annotator)), 'w') as det_preds:
+        with open(os.path.join(save_path, det_file), 'w') as det_preds:
             det_preds.write("filename,start_time(s),end_time(s),species,detection_conf\n")
             for f, st, p, s in zip(inf_dset.data, inf_dset.sts, preds, total_scores):
                 if p == 1:
-                    det_preds.write("{},{},{},{},{}\n".format(f, st, st+inf_dset.seg_size, "None", s))
+                    det_preds.write("{},{},{},{},{}\n".format(f, st, st+inf_dset.seg_size, "None", s[1]))
 
     print('Done.')
 

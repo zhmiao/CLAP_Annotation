@@ -160,11 +160,19 @@ class PromptLogger():
                 gr.Column(visible=False),
                 gr.Text(command,
                         label="Prompt file is saved to `{}`.".format(self.prompt_file) +\
-                              "Please past the following command or " +\
+                              "Please paste the following command or " +\
                               "click the Run Batch Detection button to run batch detection.",
                         visible=True),
                 gr.Button("Run Batch Detection!", visible=True),
                 gr.Button(visible=False)]
+
+    def batch_detection(self, wav_list, neg_prompt, pos_prompt, theta, ann_path, sess_id, seed):
+        det_file = "det_{}_id_{}_seed_{}.csv".format(self.annotator, sess_id, seed)
+        batch_audio_detection(wav_list=wav_list, neg_prompts=neg_prompt, pos_prompts=pos_prompt,
+                              theta=theta, output_spec=False, output_det=True, 
+                              save_path=ann_path, det_file=det_file,
+                              progress="gr")
+        return gr.Text("Detection file saved to `{}`".format(os.path.join(ann_path, det_file)), label="Batch detection finished. You can start annotation.")
 
 class PromptTest(gr.Blocks):
     def __init__(self, prompt_logger, max_sample=10):
@@ -289,9 +297,10 @@ class PromptTest(gr.Blocks):
                              inputs=[command_text, det_neg_prompt, det_pos_prompt, det_conf],
                              outputs=[conf_col, prompt_col, prompt_final_col, finish_text, batch_det_but, finish_but])
 
-            # batch_det_but.click(self.prompt_logger.run_batch_detection,
-            #                     inputs=[data_file_list, det_neg_prompt, det_pos_prompt, det_conf,
-            #                             ann_path, prompt_sess_id, random_seed])
+            batch_det_but.click(self.prompt_logger.batch_detection,
+                                inputs=[data_file_list, det_neg_prompt, det_pos_prompt, det_conf,
+                                        ann_path, prompt_sess_id, random_seed],
+                                outputs=finish_text)
     
 class Annotation(gr.Blocks):
 
