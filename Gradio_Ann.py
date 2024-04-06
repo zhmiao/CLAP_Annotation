@@ -1,7 +1,7 @@
 import gradio as gr
 
-from utils import AnnLogger, ValLogger
-from blocks import * 
+from app.loggers import * 
+from app.blocks import * 
 
 prompt_logger = PromptLogger()
 ann_logger = AnnLogger()
