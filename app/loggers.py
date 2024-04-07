@@ -107,7 +107,7 @@ class PromptLogger():
         file_list = file_list.split("\n")
         
         populated_path = [gr.Image(os.path.join("./temp/prompting_sample_files",
-                                                p.split('/')[-1].replace(".wav", '')+"_spec.png"), visible=True, label=p, height=192)
+                                                p.split('/')[-1].replace(".wav", '')+"_spec.jpg"), visible=True, label=p, interactive=False, scale=0.4, sources=[])
                           for p in file_list]
         return populated_path + [gr.Image(visible=False)] * (self.max_sample - len(file_list))
     
@@ -272,7 +272,7 @@ class AnnLogger():
         return [gr.Accordion("Configurations", open=False),
                 gr.Column(visible=True),
                 gr.Text(self.current_file),
-                gr.Image(os.path.join(self.temp_path, "ann_full_spec.png"),
+                gr.Image(os.path.join(self.temp_path, "ann_full_spec.jpg"),
                          label="Detection Predictions:"),
                 gr.Audio(self.current_file, label=self.current_file),
                 gr.Text("There are {} annotated segments.".format(len(self.file_ann)),
@@ -299,12 +299,12 @@ class AnnLogger():
         """
         # Set the segment counter to 0 and load the first segment for annotation.
         self.seg_counter = 0
-        self.img_segs = sorted(glob(os.path.join(self.seg_path, "ann_*.png")))
+        self.img_segs = sorted(glob(os.path.join(self.seg_path, "ann_*.jpg")))
         self.aud_segs = sorted(glob(os.path.join(self.seg_path, "ann_*.wav")))
         img_seg = self.img_segs[self.seg_counter]
         aud_seg = self.aud_segs[self.seg_counter]
 
-        return [gr.Image(img_seg, label="Spectrogram Seg:"),
+        return [gr.Image(img_seg, label="Spectrogram Seg:", interactive=True, sources=[]),
                 gr.Audio(aud_seg, label="Audio Seg:"),
                 gr.Text(visible=True),
                 gr.Column(visible=True)]
@@ -328,7 +328,7 @@ class AnnLogger():
             return [gr.Column(visible=True),
                     gr.Text(visible=False),
                     gr.Text(self.current_file),
-                    gr.Image(os.path.join(self.temp_path, "ann_full_spec.png"),
+                    gr.Image(os.path.join(self.temp_path, "ann_full_spec.jpg"),
                              label="Detection Predictions:"),
                     gr.Audio(self.current_file, label=self.current_file),
                     gr.Text("There are {} detected segments.".format(len(self.file_ann)),
@@ -364,8 +364,8 @@ class AnnLogger():
             self.seg_counter += 1
             img_seg = self.img_segs[self.seg_counter]
             aud_seg = self.aud_segs[self.seg_counter]
-            return [gr.Image(img_seg, label="Spectrogram Seg:"),
-                    gr.Audio(aud_seg, label="Audio Seg:"),
+            return [gr.Image(img_seg, label="Spectrogram Seg:", interactive=True, sources=[]),
+                    gr.Audio(aud_seg, label="Audio Seg:", scale=0.8),
                     gr.Column(visible=True),
                     gr.Text("Please select a category in the dropdown menu.", label="Instruction:"),
                     gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None)]
@@ -398,6 +398,7 @@ class ValLogger():
     - val_file_path: Path to save the validation file.
     """
     def __init__(self, temp_path="./temp"):
+        self.data_root = None
         self.ann_path = None
         self.aud_files = []
 
@@ -410,6 +411,9 @@ class ValLogger():
         self.current_cat = None
         self.ann_df_cat = None
         self.aud_files_cat = None
+        self.cat_segs = []
+
+        self.seg_counter = 0
 
         self.temp_path = temp_path
         self.seg_path = os.path.join(self.temp_path, "segs")
@@ -417,7 +421,6 @@ class ValLogger():
         self.file_ann = None
         self.file_cat = None
         self.aud_counter = 0
-        self.seg_counter = 0
         self.current_file = None
 
     def load_data(self, data_root_path):
@@ -431,10 +434,11 @@ class ValLogger():
         - A list of Gradio components to display available audio files and annotation path.
         """
         # Load the files from the directory
-        tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        self.data_root = data_root_path
+        tgt_files = glob(os.path.join(self.data_root, "**/*.wav"), recursive=True)
         return [gr.Text("\n".join(tgt_files), lines=5, label="Available files:"),
                 gr.Column(visible=True),
-                gr.Text("{}/annotations".format(data_root_path), label="Default path where annotation and validation files are saved:",
+                gr.Text("{}/annotations".format(self.data_root), label="Default path where annotation and validation files are saved:",
                         info="Please change the directory here if necessary!")]
 
     def register_ann_path(self, ann_path):
@@ -506,12 +510,44 @@ class ValLogger():
                           prefix=aud_f.split('/')[-1].replace(".wav", ''),
                           clean_seg_folder=(i == 0), save_full=False)
 
+        self.cat_segs = glob("./temp/segs/**/*.jpg", recursive=True)
+
         return [gr.Markdown("There are {} segments annotated for {}.".format(len(self.ann_df_cat), self.current_cat)),
                 gr.Column(visible=False),
                 gr.Button("Next", visible=True)]
 
     def populate_segments(self):
-        pass
+
+        outputs = [gr.Column(visible=True)]
+
+        if len(self.cat_segs) - self.seg_counter >= 5:
+            max_render = 5
+        else:
+            max_render = len(self.cat_segs) - self.seg_counter
+        for i in range(self.seg_counter, (max_render + self.seg_counter)):
+            seg = self.cat_segs[i]
+            aud = seg.replace("ImgSeg", "AudSeg").replace(".jpg", ".wav")
+            file = seg.replace("./temp/segs", self.data_root).split("_ImgSeg_")[0]+".wav"
+            st = int(seg.split('_')[-2])
+            cat = self.ann_df["species"][(self.ann_df["filename"] == file) & (self.ann_df["start_time(s)"] == st)].item()
+            outputs += [gr.Row(visible=True),
+                        # gr.Image(seg, label="{} Starting seconds {}".format(file, st), height=230, interactive=True),
+                        gr.Image(seg, height=200, interactive=True, sources=[]),
+                        gr.Audio(aud, label="{} Starting seconds {}".format(file, st)),
+                        gr.Dropdown(SPECIES_LIST, value=cat, label="Select a different species if needed.", interactive=True, min_width=50),
+                        gr.Text("{}, {}".format(file, st), visible=False)]
+
+            self.seg_counter += 1
+        if max_render < 5:
+            for i in range(5 - max_render):
+                outputs += [gr.Row(visible=False),
+                            gr.Image(),
+                            gr.Audio(),
+                            gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed."),
+                            gr.Text()]
+        return outputs
+
+
 
 
     def end_validation(self):
@@ -535,7 +571,7 @@ class ValLogger():
         """
         # Set the segment counter to 0 and load the first segment for validation.
         self.seg_counter = 0
-        self.img_segs = sorted(glob(os.path.join(self.seg_path, "*.png")))
+        self.img_segs = sorted(glob(os.path.join(self.seg_path, "*.jpg")))
         self.aud_segs = sorted(glob(os.path.join(self.seg_path, "*.wav")))
         img_seg = self.img_segs[self.seg_counter]
         aud_seg = self.aud_segs[self.seg_counter]
@@ -566,7 +602,7 @@ class ValLogger():
             return [gr.Column(visible=True),
                     gr.Text(visible=False),
                     gr.Text(self.current_file),
-                    gr.Image(os.path.join(self.temp_path, "val_full_spec.png"),
+                    gr.Image(os.path.join(self.temp_path, "val_full_spec.jpg"),
                              label="Detection Predictions:"),
                     gr.Audio(self.current_file, label=self.current_file),
                     gr.Text("There are {} annotated segments.".format(len(self.file_ann)),

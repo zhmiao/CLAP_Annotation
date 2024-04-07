@@ -13,6 +13,7 @@ ann_block = Annotation(ann_logger)
 val_block = Validation(val_logger)
 
 demo = gr.TabbedInterface([wel_block, prompt_block, ann_block, val_block],
-                          tab_names=["Welcome", "Prompt Testing", "Annotation", "Validation"])
+                          tab_names=["Welcome", "Prompt Testing", "Annotation", "Validation"],
+                          css=".seg_images {height: 1% !important; width: 3% !important;}")
 
 demo.launch()

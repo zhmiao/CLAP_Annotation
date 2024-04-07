@@ -195,7 +195,7 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
                 bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
                 
                 if output_segs:
-                    fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.png").format(seg_counter,
+                    fig.savefig(os.path.join(seg_folder, "ImgSeg_{}_{}_{}_{:.2f}.jpg").format(seg_counter,
                                                                                               seg_size * i,
                                                                                               seg_size * (i + 1),
                                                                                               s*100),
@@ -211,7 +211,7 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
     ax.tick_params(axis='x', which="major", labelsize=17)
 
     print("Saving figure {}..".format(prefix))
-    plt.savefig(os.path.join(save_path, "{}_spec.png".format(prefix)), bbox_inches="tight")  
+    plt.savefig(os.path.join(save_path, "{}_spec.jpg".format(prefix)), bbox_inches="tight")  
 
 
 # %%
@@ -314,7 +314,7 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
     print('Done.')
 
     # return [gr.Text("There are {} possible calls.".format(np.sum(preds)), label="Number of detected events:"),
-    #         gr.Image(os.path.join(save_path, "full_spec.png"), label="Detection Predictions:"),
+    #         gr.Image(os.path.join(save_path, "full_spec.jpg"), label="Detection Predictions:"),
     #         gr.Column(visible=True),
     #         gr.Text("Please click the Detect button for possible call detections.", label="Instruction:", visible=True)]
 
@@ -378,7 +378,7 @@ def generate_segs(wav_path, file_ann,
         ax.text(st + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(conf), c="red", fontsize=15)
         bbox = Bbox([[st, 0],[ed, khz_lims[1]]])
         bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
-        fig.savefig(os.path.join(seg_folder, "{}_ImgSeg_{}_{}.png".format(prefix, st, i)),
+        fig.savefig(os.path.join(seg_folder, "{}_ImgSeg_{}_{}.jpg".format(prefix, st, i)),
                     bbox_inches=bbox)
         sf.write(os.path.join(seg_folder, "{}_AudSeg_{}_{}.wav".format(prefix, st, i)),
                  wav[st*sr : ed*sr], sr)
@@ -388,7 +388,7 @@ def generate_segs(wav_path, file_ann,
 
     if save_full:
         print("Saving figure..")
-        plt.savefig(os.path.join(save_path, "{}_full_spec.png".format(prefix)), bbox_inches="tight")  
+        plt.savefig(os.path.join(save_path, "{}_full_spec.jpg".format(prefix)), bbox_inches="tight")  
 
 # # %%
 # def tab_init():

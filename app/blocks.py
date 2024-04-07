@@ -238,7 +238,7 @@ class Annotation(gr.Blocks):
 class Validation(gr.Blocks):
 
     def __init__(self, val_logger):
-        super().__init__()
+        super().__init__(css=".seg_images {height: 2px;}")
         self.val_logger = val_logger
         self.build_blocks()
 
@@ -283,30 +283,45 @@ class Validation(gr.Blocks):
                 with gr.Column(visible=True) as val_seg_col:
 
                     with gr.Row(visible=False) as row_1:
-                        spec_1 = gr.Image()
-                        aud_1 = gr.Audio()
-                        seg_1 = gr.Text()
-                        drop_1 = gr.Dropdown(SPECIES_LIST, label="Select a different species if needed.")
+                        with gr.Column():
+                            spec_1 = gr.Image()
+                        with gr.Column():
+                            aud_1 = gr.Audio()
+                        with gr.Column():
+                            drop_1 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.", min_width=50)
+                        seg_info_1 = gr.Text("", visible=False)
                     with gr.Row(visible=False) as row_2:
-                        spec_2 = gr.Image()
-                        aud_2 = gr.Audio()
-                        seg_2 = gr.Text()
-                        drop_2 = gr.Dropdown(SPECIES_LIST, label="Select a different species if needed.")
+                        with gr.Column():
+                            spec_2 = gr.Image()
+                        with gr.Column():
+                            aud_2 = gr.Audio()
+                        with gr.Column():
+                            drop_2 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+                        seg_info_2 = gr.Text("", visible=False)
                     with gr.Row(visible=False) as row_3:
-                        spec_3 = gr.Image()
-                        aud_3 = gr.Audio()
-                        seg_3 = gr.Text()
-                        drop_3 = gr.Dropdown(SPECIES_LIST, label="Select a different species if needed.")
+                        with gr.Column():
+                            spec_3 = gr.Image()
+                        with gr.Column():
+                            aud_3 = gr.Audio()
+                        with gr.Column():
+                            drop_3 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+                        seg_info_3 = gr.Text("", visible=False)
                     with gr.Row(visible=False) as row_4:
-                        spec_4 = gr.Image()
-                        aud_4 = gr.Audio()
-                        seg_4 = gr.Text()
-                        drop_4 = gr.Dropdown(SPECIES_LIST, label="Select a different species if needed.")
+                        with gr.Column():
+                            spec_4 = gr.Image()
+                        with gr.Column():
+                            aud_4 = gr.Audio()
+                        with gr.Column():
+                            drop_4 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+                        seg_info_4 = gr.Text("", visible=False)
                     with gr.Row(visible=False) as row_5:
-                        spec_5 = gr.Image()
-                        aud_5 = gr.Audio()
-                        seg_5 = gr.Text()
-                        drop_5 = gr.Dropdown(SPECIES_LIST, label="Select a different species if needed.")
+                        with gr.Column():
+                            spec_5 = gr.Image()
+                        with gr.Column():
+                            aud_5 = gr.Audio()
+                        with gr.Column():
+                            drop_5 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+                        seg_info_5 = gr.Text("", visible=False)
                     
                     batch_next_but = gr.Button("Next Batch")
 
@@ -338,7 +353,13 @@ class Validation(gr.Blocks):
             
             get_seg_spec_but.click(self.val_logger.populate_segments,
                                    inputs=None,
-                                   outputs=None)
+                                   outputs=[val_col, 
+                                            row_1, spec_1, aud_1, drop_1, seg_info_1,
+                                            row_2, spec_2, aud_2, drop_2, seg_info_2,
+                                            row_3, spec_3, aud_3, drop_3, seg_info_3,
+                                            row_4, spec_4, aud_4, drop_4, seg_info_4,
+                                            row_5, spec_5, aud_5, drop_5, seg_info_5
+                                            ])
 
             # # Get the annotation
             # get_ann_output_val.click(self.val_logger.start_segment_validation, 
