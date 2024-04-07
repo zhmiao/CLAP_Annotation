@@ -4,6 +4,7 @@ import os
 import shutil
 import random
 import json
+import copy
 from glob import glob
 import pandas as pd
 import gradio as gr
@@ -303,9 +304,13 @@ class AnnLogger():
         self.aud_segs = sorted(glob(os.path.join(self.seg_path, "ann_*.wav")))
         img_seg = self.img_segs[self.seg_counter]
         aud_seg = self.aud_segs[self.seg_counter]
+        seg_id = img_seg.replace(".jpg", '').split('_')[-1]
+        seg_conf = float(img_seg.replace(".jpg", '').split('_')[-2])
+        seg_st = int(img_seg.replace(".jpg", '').split('_')[-3])
 
-        return [gr.Image(img_seg, label="Spectrogram Seg:", interactive=True, sources=[]),
-                gr.Audio(aud_seg, label="Audio Seg:"),
+        return [gr.Image(img_seg, label="Seg #{}; st: {}s; conf: {}%.".format(seg_id, seg_st, seg_conf*100),
+                         interactive=True, sources=[]),
+                gr.Audio(aud_seg, label="Seg #{}; st: {}s; conf: {}%.".format(seg_id, seg_st, seg_conf*100)),
                 gr.Text(visible=True),
                 gr.Column(visible=True)]
 
@@ -414,6 +419,7 @@ class ValLogger():
         self.cat_segs = []
 
         self.seg_counter = 0
+        self.seg_info = []
 
         self.temp_path = temp_path
         self.seg_path = os.path.join(self.temp_path, "segs")
@@ -482,14 +488,15 @@ class ValLogger():
         - A list of Gradio components for initiating the validation process.
         """
         # Set the annotation file path and create the validation file path.
-        self.val_file_path = ann_file.replace("ann_", "val_{}_ann_.csv".format(self.validator_name))
+        self.val_file_path = ann_file.replace("ann_", "val_{}_ann_".format(self.validator_name))
         # Load the annotation file and prepare for validation.
         self.ann_df = pd.read_csv(ann_file)
-        self.unique_cat = self.ann_df["species"].unique()
+        self.val_df = copy.deepcopy(self.ann_df)
+        self.unique_cat = list(self.ann_df["species"].unique())
 
         return [gr.Accordion("Configurations", open=False),
                 gr.Accordion("Category selection", open=True, visible=True),
-                gr.Dropdown(choices=list(self.unique_cat), label="Available categories:"),
+                gr.Dropdown(choices=self.unique_cat, label="Available categories:"),
                 gr.Markdown("There are {} categories annotated. Please select one category in the dropdown menu to validate.".format(len(self.unique_cat)))]
 
     def fetch_segments(self, tgt_cat):
@@ -503,7 +510,7 @@ class ValLogger():
         gr_progress(0, desc="Starting")
 
         for i in gr_progress.tqdm(range(len(self.aud_files_cat)),
-                                  desc="Fetching all segments for {}...".format(self.current_cat)):
+                                  desc="Fetching all segments for {}. This can take a while...".format(self.current_cat)):
             aud_f = self.aud_files_cat[i]
             ann_f = self.ann_df_cat.loc[self.ann_df_cat["filename"] == aud_f]
             generate_segs(aud_f, ann_f,
@@ -518,7 +525,12 @@ class ValLogger():
 
     def populate_segments(self):
 
-        outputs = [gr.Column(visible=True)]
+        outputs = [gr.Column(visible=True),
+                   gr.Accordion("Category selection", open=False),
+                   gr.Column(visible=True),
+                   gr.Text("Please use the dropdown menu to change the catgegory.",
+                           label="Instruction:", visible=True),
+                   gr.Button("Next Batch", visible=True)]
 
         if len(self.cat_segs) - self.seg_counter >= 5:
             max_render = 5
@@ -528,27 +540,66 @@ class ValLogger():
             seg = self.cat_segs[i]
             aud = seg.replace("ImgSeg", "AudSeg").replace(".jpg", ".wav")
             file = seg.replace("./temp/segs", self.data_root).split("_ImgSeg_")[0]+".wav"
-            st = int(seg.split('_')[-2])
-            cat = self.ann_df["species"][(self.ann_df["filename"] == file) & (self.ann_df["start_time(s)"] == st)].item()
-            outputs += [gr.Row(visible=True),
-                        # gr.Image(seg, label="{} Starting seconds {}".format(file, st), height=230, interactive=True),
-                        gr.Image(seg, height=200, interactive=True, sources=[]),
-                        gr.Audio(aud, label="{} Starting seconds {}".format(file, st)),
+            seg_conf = float(seg.replace(".jpg", '').split('_')[-2])
+            seg_st = int(seg.replace(".jpg", '').split('_')[-3])
+            cat = self.ann_df["species"][(self.ann_df["filename"] == file) & (self.ann_df["start_time(s)"] == seg_st)].item()
+            outputs += [gr.Column(visible=True),
+                        gr.Image(seg, height=200, interactive=True, sources=[], label="Spectrogram:"),
+                        gr.Audio(aud, label="Audio:"),
                         gr.Dropdown(SPECIES_LIST, value=cat, label="Select a different species if needed.", interactive=True, min_width=50),
-                        gr.Text("{}, {}".format(file, st), visible=False)]
+                        gr.Markdown("{}; st: {}s; conf: {}%".format(file, seg_st, seg_conf*10))]
 
             self.seg_counter += 1
+            self.seg_info.append((file, seg_st, self.current_cat))
         if max_render < 5:
             for i in range(5 - max_render):
-                outputs += [gr.Row(visible=False),
+                outputs += [gr.Column(visible=False),
                             gr.Image(),
                             gr.Audio(),
                             gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed."),
-                            gr.Text()]
+                            gr.Markdown()]
         return outputs
 
+    def batch_update(self, drop_1, drop_2, drop_3, drop_4, drop_5):
+        val_cats = [drop_1, drop_2, drop_3, drop_4, drop_5]
+        for i in range(len(self.seg_info)):
+            if self.seg_info[i][2] != val_cats[i]:
+                self.val_df.loc[(self.ann_df["filename"] == self.seg_info[i][0]) &\
+                                (self.ann_df["start_time(s)"] == self.seg_info[i][1]) &\
+                                (self.ann_df["species"] == self.seg_info[i][2]), "species"] = val_cats[i]
+        self.seg_info = []
 
+        if len(self.cat_segs) > self.seg_counter:
+            return self.populate_segments()
+        else:
+            self.seg_counter = 0
+            self.unique_cat.remove(self.current_cat)
+            self.val_df.to_csv(self.val_file_path, index=False)
+            return [gr.Column(visible=True),
+                    gr.Accordion("Category selection", open=False),
+                    gr.Column(visible=True),
+                    gr.Text("No more segments to validate for {}. Please select another category.".format(self.current_cat),
+                            label="Instruction:", visible=True),
+                    gr.Button(visible=False)] +\
+                   [gr.Column(visible=False),
+                    gr.Image(),
+                    gr.Audio(),
+                    gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed."),
+                    gr.Markdown()] * 5
 
+    def new_cat(self):
+
+        self.current_cat = None
+
+        return [gr.Accordion("Category selection", open=True, visible=True),
+                gr.Column(visible=len(self.unique_cat) > 0),
+                gr.Column(visible=False),
+                gr.Dropdown(choices=self.unique_cat, label="Available categories:"),
+                gr.Markdown("There are {} categories left for validate. ".format(len(self.unique_cat)) +\
+                            "Please select one category in the dropdown menu to validate." 
+                            if len(self.unique_cat) > 0 else "Please submit"), 
+                gr.Button(visible=False),
+                gr.Button("Submit", visible=len(self.unique_cat) == 0)]
 
     def end_validation(self):
         """
@@ -557,97 +608,10 @@ class ValLogger():
         Returns:
         - A list of Gradio components indicating the completion of validation.
         """
-        return [gr.Column(visible=False),
+        self.val_df.to_csv(self.val_file_path, index=False)
+        return [gr.Column(visible=True),
+                gr.Accordion(visible=False),
                 gr.Column(visible=False),
                 gr.Text(self.val_file_path, 
-                        label="Annotation saved to the following path, please close the annotation app.")]
-
-    def start_segment_validation(self):
-        """
-        Starts the validation for the first segment of the current audio file.
-
-        Returns:
-        - A list of Gradio components for validating the first segment.
-        """
-        # Set the segment counter to 0 and load the first segment for validation.
-        self.seg_counter = 0
-        self.img_segs = sorted(glob(os.path.join(self.seg_path, "*.jpg")))
-        self.aud_segs = sorted(glob(os.path.join(self.seg_path, "*.wav")))
-        img_seg = self.img_segs[self.seg_counter]
-        aud_seg = self.aud_segs[self.seg_counter]
-        ann_cat = self.file_cat[self.seg_counter]
-
-        return [gr.Image(img_seg, label="Spectrogram Seg:"),
-                gr.Audio(aud_seg, label="Audio Seg:"),
-                gr.Dropdown(SPECIES_LIST, label="Select a different species if the current is wrong:", value=ann_cat),
-                gr.Text(visible=True),
-                gr.Column(visible=True)]
-
-    def next_audio(self):
-        """
-        Proceeds to the next audio file for validation.
-
-        Returns:
-        - A list of Gradio components for the next audio file or a completion message.
-        """
-        # Proceed to the next audio file for validation.
-        try:
-            self.aud_counter += 1
-            self.current_file = self.aud_files[self.aud_counter]
-            self.file_ann = self.ann_df.loc[self.ann_df["filename"] == self.current_file]
-            self.file_cat = self.file_ann["species"].values
-
-            generate_segs(self.current_file, self.file_ann)
-
-            return [gr.Column(visible=True),
-                    gr.Text(visible=False),
-                    gr.Text(self.current_file),
-                    gr.Image(os.path.join(self.temp_path, "val_full_spec.jpg"),
-                             label="Detection Predictions:"),
-                    gr.Audio(self.current_file, label=self.current_file),
-                    gr.Text("There are {} annotated segments.".format(len(self.file_ann)),
-                            label="Number of annotated segments:"),
-                    gr.Button("Next Audio", visible=True),
-                    gr.Button(visible=False)]
-        except:
-            self.ann_df.to_csv(self.val_file_path, index=False)
-            return [gr.Column(visible=False),
-                    gr.Text("No more annotations to validate!", visible=True, label="IMPORTANT INFO:"),
-                    gr.Text(),
-                    gr.Image(),
-                    gr.Audio(),
-                    gr.Text(),
-                    gr.Button(visible=False),
-                    gr.Button("Submit", visible=True)]
-
-    def next_segment(self, category):
-        """
-        Proceeds to the next segment for validation within the current audio file.
-
-        Args:
-        - category (str): The selected category for the current segment.
-
-        Returns:
-        - A list of Gradio components for the next segment or a completion message.
-        """
-        # Proceed to the next segment for validation.
-        try:
-            ann_cat = self.file_cat[self.seg_counter]
-            if category != ann_cat:
-                self.file_cat[self.seg_counter] = category
-            self.seg_counter += 1
-            img_seg = self.img_segs[self.seg_counter]
-            aud_seg = self.aud_segs[self.seg_counter]
-            ann_cat = self.file_cat[self.seg_counter]
-            return [gr.Image(img_seg, label="Spectrogram Seg:"),
-                    gr.Audio(aud_seg, label="Audio Seg:"),
-                    gr.Dropdown(SPECIES_LIST, label="Select a species:", value=ann_cat),
-                    gr.Column(visible=True),
-                    gr.Text("Please select a category in the dropdown menu.", label="Instruction:")]
-        except:
-            self.ann_df.loc[self.ann_df["filename"] == self.current_file, "species"] = self.file_cat
-            return [gr.Image(),
-                    gr.Audio(),
-                    gr.Dropdown(),
-                    gr.Column(visible=False),
-                    gr.Text("NO MORE DETECTED SEGMENTS. PLEASE MOVE ON TO THE NEXT AUDIO.", label="INPORTANT INFO:")]
+                        label="Validation file saved to the following path, please close the annotation app.",
+                        visible=True)]

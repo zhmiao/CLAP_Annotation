@@ -191,8 +191,10 @@ class Annotation(gr.Blocks):
 
                 with gr.Column(visible=False) as ann_seg_col:
                     with gr.Row():
-                        spec_seg = gr.Image(label="Spectrogram Seg:", height=200)
-                        aud_seg = gr.Audio(label="Audio Seg:")
+                        with gr.Column():
+                            spec_seg = gr.Image(label="Spectrogram Seg:", height=200)
+                        with gr.Column():
+                            aud_seg = gr.Audio(label="Audio Seg:")
                     ann_drop = gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None)
                     seg_next_but = gr.Button("Next Segment")
                 # Go to next audio file
@@ -276,59 +278,67 @@ class Validation(gr.Blocks):
             # Starting the validation task
             with gr.Column(visible=False) as val_col:
                 # Change label
-                set_info_val = gr.Text("Please use the dropdown menu to change the catgegory.",
+                seg_info_val = gr.Text("Please use the dropdown menu to change the catgegory.",
                                        label="Instruction:", visible=False)
 
                 # Show the audio and spectrogram
                 with gr.Column(visible=True) as val_seg_col:
 
-                    with gr.Row(visible=False) as row_1:
-                        with gr.Column():
-                            spec_1 = gr.Image()
-                        with gr.Column():
-                            aud_1 = gr.Audio()
-                        with gr.Column():
-                            drop_1 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.", min_width=50)
-                        seg_info_1 = gr.Text("", visible=False)
-                    with gr.Row(visible=False) as row_2:
-                        with gr.Column():
-                            spec_2 = gr.Image()
-                        with gr.Column():
-                            aud_2 = gr.Audio()
-                        with gr.Column():
-                            drop_2 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
-                        seg_info_2 = gr.Text("", visible=False)
-                    with gr.Row(visible=False) as row_3:
-                        with gr.Column():
-                            spec_3 = gr.Image()
-                        with gr.Column():
-                            aud_3 = gr.Audio()
-                        with gr.Column():
-                            drop_3 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
-                        seg_info_3 = gr.Text("", visible=False)
-                    with gr.Row(visible=False) as row_4:
-                        with gr.Column():
-                            spec_4 = gr.Image()
-                        with gr.Column():
-                            aud_4 = gr.Audio()
-                        with gr.Column():
-                            drop_4 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
-                        seg_info_4 = gr.Text("", visible=False)
-                    with gr.Row(visible=False) as row_5:
-                        with gr.Column():
-                            spec_5 = gr.Image()
-                        with gr.Column():
-                            aud_5 = gr.Audio()
-                        with gr.Column():
-                            drop_5 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
-                        seg_info_5 = gr.Text("", visible=False)
+                    with gr.Column(visible=False) as col_1:
+                        seg_info_1 = gr.Markdown("")
+                        with gr.Row():
+                            with gr.Column():
+                                spec_1 = gr.Image()
+                            with gr.Column():
+                                aud_1 = gr.Audio()
+                            with gr.Column():
+                                drop_1 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.", min_width=50)
+                        
+                    with gr.Column(visible=False) as col_2:
+                        seg_info_2 = gr.Markdown("")
+                        with gr.Row():
+                            with gr.Column():
+                                spec_2 = gr.Image()
+                            with gr.Column():
+                                aud_2 = gr.Audio()
+                            with gr.Column():
+                                drop_2 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+
+                    with gr.Column(visible=False) as col_3:
+                        seg_info_3 = gr.Markdown("")
+                        with gr.Row():
+                            with gr.Column():
+                                spec_3 = gr.Image()
+                            with gr.Column():
+                                aud_3 = gr.Audio()
+                            with gr.Column():
+                                drop_3 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+
+                    with gr.Column(visible=False) as col_4:
+                        seg_info_4 = gr.Markdown("")
+                        with gr.Row():
+                            with gr.Column():
+                                spec_4 = gr.Image()
+                            with gr.Column():
+                                aud_4 = gr.Audio()
+                            with gr.Column():
+                                drop_4 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
+
+                    with gr.Column(visible=False) as col_5:
+                        seg_info_5 = gr.Markdown("")
+                        with gr.Row():
+                            with gr.Column():
+                                spec_5 = gr.Image()
+                            with gr.Column():
+                                aud_5 = gr.Audio()
+                            with gr.Column():
+                                drop_5 = gr.Dropdown(SPECIES_LIST, value=None, label="Select a different species if needed.")
                     
                     batch_next_but = gr.Button("Next Batch")
 
-                # Go to next audio file
-                with gr.Column():
-                    next_but_val = gr.Button(value="Select a new category", visible=True)
-                    submit_but_val = gr.Button("Submit", visible=False)
+                    new_cat_but = gr.Button(value="Save and select a new category", visible=True)
+
+            submit_but = gr.Button("Submit", visible=False)
 
             # Load the data 
             data_fetch_but.click(self.val_logger.load_data, 
@@ -353,26 +363,27 @@ class Validation(gr.Blocks):
             
             get_seg_spec_but.click(self.val_logger.populate_segments,
                                    inputs=None,
-                                   outputs=[val_col, 
-                                            row_1, spec_1, aud_1, drop_1, seg_info_1,
-                                            row_2, spec_2, aud_2, drop_2, seg_info_2,
-                                            row_3, spec_3, aud_3, drop_3, seg_info_3,
-                                            row_4, spec_4, aud_4, drop_4, seg_info_4,
-                                            row_5, spec_5, aud_5, drop_5, seg_info_5
-                                            ])
+                                   outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but,
+                                            col_1, spec_1, aud_1, drop_1, seg_info_1,
+                                            col_2, spec_2, aud_2, drop_2, seg_info_2,
+                                            col_3, spec_3, aud_3, drop_3, seg_info_3,
+                                            col_4, spec_4, aud_4, drop_4, seg_info_4,
+                                            col_5, spec_5, aud_5, drop_5, seg_info_5])
 
-            # # Get the annotation
-            # get_ann_output_val.click(self.val_logger.start_segment_validation, 
-            #                          outputs=[spec_seg_val, aud_seg_val, val_drop, set_info_val, val_seg_col])
-            # # Next segment button
-            # seg_next_but_val.click(self.val_logger.next_segment, 
-            #                        inputs=val_drop, 
-            #                        outputs=[spec_seg_val, aud_seg_val, val_drop, val_seg_col, set_info_val])
-            # # Next audio button
-            # next_but_val.click(self.val_logger.next_audio, 
-            #                    outputs=[val_col_2, set_info_val, cur_file_path_val,
-            #                             cur_spec_val, cur_aud_val, val_txt_summ,
-            #                             next_but_val, submit_but_val])
-            # # Submit button
-            # submit_but_val.click(self.val_logger.end_validation, 
-            #                      outputs=[val_col_2, val_seg_col, set_info_val])
+            batch_next_but.click(self.val_logger.batch_update,
+                                 inputs=[drop_1,drop_2,drop_3,drop_4,drop_5],
+                                 outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but,
+                                          col_1, spec_1, aud_1, drop_1, seg_info_1,
+                                          col_2, spec_2, aud_2, drop_2, seg_info_2,
+                                          col_3, spec_3, aud_3, drop_3, seg_info_3,
+                                          col_4, spec_4, aud_4, drop_4, seg_info_4,
+                                          col_5, spec_5, aud_5, drop_5, seg_info_5])
+
+            new_cat_but.click(self.val_logger.new_cat,
+                              inputs=None,
+                              outputs=[cat_sel_acc, fetch_col, val_col, cat_drop, cat_sel_text,
+                                       get_seg_spec_but, submit_but])
+
+            # Submit button
+            submit_but.click(self.val_logger.end_validation, 
+                             outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val])

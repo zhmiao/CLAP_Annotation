@@ -372,16 +372,17 @@ def generate_segs(wav_path, file_ann,
         ed = file_ann["end_time(s)"].values[i]
         conf = file_ann["detection_conf"].values[i]
 
+        bbox = Bbox([[st, 0],[ed, khz_lims[1]]])
+        bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
+        fig.savefig(os.path.join(seg_folder, "{}_ImgSeg_{}_{:.2f}_{}.jpg".format(prefix, st, conf, i)),
+                    bbox_inches=bbox)
+        sf.write(os.path.join(seg_folder, "{}_AudSeg_{}_{:.2f}_{}.wav".format(prefix, st, conf, i)),
+                 wav[st*sr : ed*sr], sr)
+
         ax.add_patch(Rectangle((st, 0), ed - st, khz_lims[1], linewidth=2, facecolor="orange",
                                edgecolor="red", alpha=0.25))
         ax.text(st + 0.3, khz_lims[1] - 0.7, "Seg #{}".format(i), c="red", fontsize=15)
         ax.text(st + 0.3, khz_lims[1] - 1.3, "Conf: {:.2f}".format(conf), c="red", fontsize=15)
-        bbox = Bbox([[st, 0],[ed, khz_lims[1]]])
-        bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
-        fig.savefig(os.path.join(seg_folder, "{}_ImgSeg_{}_{}.jpg".format(prefix, st, i)),
-                    bbox_inches=bbox)
-        sf.write(os.path.join(seg_folder, "{}_AudSeg_{}_{}.wav".format(prefix, st, i)),
-                 wav[st*sr : ed*sr], sr)
 
     ax.set(xlabel=None)
     ax.tick_params(axis='x', which="major", labelsize=17)
