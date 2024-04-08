@@ -29,7 +29,8 @@ class PromptTest(gr.Blocks):
             with gr.Column(visible=True) as conf_col:
                 with gr.Accordion("Configurations", open=True) as load_acc:
 
-                    data_root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                    prompt_data_root_path = gr.Text("./demo_data", label="Please type in the directory of where images for prompting are stored:",
+                                                  interactive=True)
                     data_fetch_but = gr.Button("Get data from the root directory.")
 
                     # Gradio components to show the available files and the path to save the annotation file
@@ -37,8 +38,6 @@ class PromptTest(gr.Blocks):
                     with gr.Column(visible=False) as data_config_col:
                         with gr.Accordion("Open to see all available files.", open=False):
                             data_file_list = gr.Text("", lines=5, label="Available files:")
-
-
                         with gr.Row():
                             num_file = gr.Text("2", label="Number of randomly selected file for testing prompts (Max 10 files):", interactive=True)
                             random_seed = gr.Text("0", label="Random seed:", interactive=True)
@@ -91,11 +90,18 @@ class PromptTest(gr.Blocks):
                     submit_but = gr.Button("Submit prompts!")
                 
             with gr.Column(visible=False) as prompt_final_col:
-                prompt_path = gr.Text("", label="Prompt information file will be saved to:", info="Please change the directory here if necessary!")
-                ann_path = gr.Text("", label="Batch detection file will be saved to:", info="Please change the directory here if necessary!")
-                prompt_sess_id = gr.Text("0", label="Prompt testing session id for reference:", info="Please change the session number here if necessary!")
-                command_text = gr.Text("Click Generate Detection Command button to generate batch detection commands.")
-                command_but = gr.Button("Generate Detection Command!")
+
+                data_path = gr.Text("", label="Data directory for batch detection:", info="Please change the directory here if necessary!")
+                data_confirm_but = gr.Button("Confirm data root.")
+
+                with gr.Column(visible=False) as prompt_final_col_2:
+                    with gr.Accordion("", open=False) as batch_data_acc:
+                        batch_data_file_list = gr.Text("", lines=5, label="Available files for batch detection:")
+                    prompt_path = gr.Text("", label="Prompt information file will be saved to:", info="Please change the directory here if necessary!")
+                    ann_path = gr.Text("", label="Batch detection file will be saved to:", info="Please change the directory here if necessary!")
+                    prompt_sess_id = gr.Text("0", label="Prompt testing session id for reference:", info="Please change the session number here if necessary!")
+                    command_text = gr.Text("Click Generate Detection Command button to generate batch detection commands.")
+                    command_but = gr.Button("Generate Detection Command!")
 
             with gr.Column(visible=False) as prompt_finish_col:
                 finish_text = gr.Text("", visible=False)
@@ -105,9 +111,8 @@ class PromptTest(gr.Blocks):
             # %% # Annotation buttons and actions
             # Load the data
             data_fetch_but.click(self.prompt_logger.load_data, 
-                                 inputs=data_root_path, 
+                                 inputs=prompt_data_root_path, 
                                  outputs=[data_file_list, data_config_col, prompt_path])
-
             # Get sample data for prompting
             random_data_fetch_but.click(self.prompt_logger.load_sample_data, 
                                          inputs=[num_file, random_seed], 
@@ -129,11 +134,16 @@ class PromptTest(gr.Blocks):
                           outputs=spec_list)
 
             submit_but.click(self.prompt_logger.submission,
-                             inputs=data_root_path,
-                             outputs=[prompt_acc, prompt_final_col, prompt_finish_col, prompt_path, ann_path])
+                             inputs=prompt_data_root_path,
+                             outputs=[prompt_acc, prompt_final_col, data_path])
+
+            data_confirm_but.click(self.prompt_logger.path_confirm,
+                                   inputs=data_path,
+                                   outputs=[prompt_final_col_2, prompt_finish_col, batch_data_acc, batch_data_file_list,
+                                            prompt_path, ann_path])
 
             command_but.click(self.prompt_logger.command_gen,
-                              inputs=[data_root_path, ann_path, prompt_path, prompt_sess_id, random_seed],
+                              inputs=[data_path, ann_path, prompt_path, prompt_sess_id, random_seed],
                               outputs=command_text)
 
             finish_but.click(self.prompt_logger.finish,
@@ -141,7 +151,7 @@ class PromptTest(gr.Blocks):
                              outputs=[conf_col, prompt_col, prompt_final_col, finish_text, batch_det_but, finish_but])
 
             batch_det_but.click(self.prompt_logger.batch_detection,
-                                inputs=[data_file_list, det_neg_prompt, det_pos_prompt, det_conf,
+                                inputs=[det_neg_prompt, det_pos_prompt, det_conf,
                                         ann_path, prompt_sess_id, random_seed],
                                 outputs=finish_text)
     
@@ -159,10 +169,9 @@ class Annotation(gr.Blocks):
 
                 root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
+
                 # Gradio components to show the available files and the path to save the annotation file
                 with gr.Column(visible=False) as path_col:
-                    with gr.Accordion("Open to see all available files.", open=False):
-                        file_list = gr.Text("", lines=5, label="Available files:")
                     ann_path = gr.Text("", label="Annotation file will be saved to:", info="Please change the directory here if necessary!")
                     det_path = gr.Text("", label="Directory where batch detection results are saved to", info="Please change the directory here if necessary!")
                     get_det_file_but = gr.Button("Get Detection Results Files")
@@ -170,7 +179,10 @@ class Annotation(gr.Blocks):
                 # Name registering
                 with gr.Column(visible=False) as register_col:
                     det_drop = gr.Dropdown(choices=[], label="Select a batch detection result file to annotate:") 
-                    with gr.Row():
+                    get_ann_file_but = gr.Button("Load all files with detected segments.")
+                    with gr.Accordion("", visible=False, open=False) as file_acc:
+                        file_list = gr.Text("", lines=5, label="Available files:")
+                    with gr.Row(visible=False) as name_row:
                         ann_name = gr.Textbox(lines=1, label="Please put your name here and register before annotation:", interactive=True)
                         ann_name_reg_but = gr.Button("Register Your Name", scale=0.5)
                     start_but = gr.Button("Start annotations!", visible=False)
@@ -206,18 +218,23 @@ class Annotation(gr.Blocks):
             # Load the data
             data_fetch_but.click(self.ann_logger.load_data, 
                                  inputs=root_path, 
-                                 outputs=[file_list, path_col, ann_path, det_path])
+                                 outputs=[path_col, ann_path, det_path])
+            
             # Load the annotation
             get_det_file_but.click(self.ann_logger.register_ann_path,
                                   inputs=[ann_path, det_path],
                                   outputs=[det_drop, register_col])
+
+            get_ann_file_but.click(self.ann_logger.load_detected_files,
+                                   inputs=det_drop,
+                                   outputs=[file_acc, file_list, name_row])
             # Register the name
             ann_name_reg_but.click(self.ann_logger.register_ann_file, 
                                    inputs=ann_name, 
                                    outputs=[ann_name, start_but])
             # Start the validation
             start_but.click(self.ann_logger.start_annotation,
-                            inputs=det_drop,
+                            inputs=None,
                             outputs=[load_acc, ann_col, cur_file_path, cur_spec,
                                      cur_aud, txt_summ])
             # Get the annotation

@@ -38,6 +38,8 @@ class PromptLogger():
         self.prompt_file = None
         self.annotator = None
 
+        self.batch_file_list = []
+
     def load_data(self, data_root_path):
         """
         Loads the data from the specified root path and prepares it for annotation.
@@ -121,13 +123,26 @@ class PromptLogger():
     def submission(self, data_root_path):
         return [gr.Accordion("Prompting results.", open=False),
                 gr.Column(visible=True),
+                gr.Text("{}".format(data_root_path), label="Data directory for batch detection:",
+                        info="Please change the directory here if necessary!", interactive=True)]
+
+    def path_confirm(self, data_root_path):
+
+        self.batch_file_list = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+
+        return [gr.Column(visible=True),
                 gr.Column(visible=True),
+                gr.Accordion("There are {} files for batch detection. Open to see all the data:".format(len(self.batch_file_list)),
+                             open=False),
+                gr.Text("\n".join(self.batch_file_list), lines=5, label="Available files:"),
                 gr.Text("{}/annotations".format(data_root_path), label="Prompt information of this round will be saved to:",
                         info="Please change the directory here if necessary!", interactive=True),
                 gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:",
                         info="Please change the directory here if necessary!", interactive=True)]
 
     def command_gen(self, data_root, ann_path, prompt_path, sess_id, seed):
+        os.makedirs(prompt_path, exist_ok=True)
+        os.makedirs(ann_path, exist_ok=True)
         self.prompt_file = os.path.join(prompt_path, "prompt_{}_id_{}_seed_{}.json".format(self.annotator, sess_id, seed))
         return gr.Text("python batch_detection.py --data_root {} --prompt {} --det_out {}".format(data_root, self.prompt_file, ann_path),
                        label="If you are happy with that, please click on the Finish button and run the command in your terminal!",
@@ -152,9 +167,9 @@ class PromptLogger():
                 gr.Button("Run Batch Detection!", visible=True),
                 gr.Button(visible=False)]
 
-    def batch_detection(self, wav_list, neg_prompt, pos_prompt, theta, ann_path, sess_id, seed):
+    def batch_detection(self, neg_prompt, pos_prompt, theta, ann_path, sess_id, seed):
         det_file = "det_{}_id_{}_seed_{}.csv".format(self.annotator, sess_id, seed)
-        batch_audio_detection(wav_list=wav_list, neg_prompts=neg_prompt, pos_prompts=pos_prompt,
+        batch_audio_detection(wav_list=self.batch_file_list, neg_prompts=neg_prompt, pos_prompts=pos_prompt,
                               theta=theta, output_spec=False, output_det=True, 
                               save_path=ann_path, det_file=det_file,
                               progress="gr")
@@ -184,13 +199,14 @@ class AnnLogger():
 
         self.ann_path = None
         self.det_path = None
+        self.det_file = None
         self.annotator_name = None
         self.ann_file_path = None
         self.det_df = None
 
         self.temp_path = temp_path
         self.seg_path = os.path.join(self.temp_path, "segs")
-        self.det_files = []
+        self.det_file_list = []
         self.file_ann = None
         self.file_cat = []
         self.aud_counter = 0
@@ -209,9 +225,8 @@ class AnnLogger():
         - A list of Gradio components to display available audio files and annotation path.
         """
         # Load the files from the directory
-        tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
-        return [gr.Text("\n".join(tgt_files), lines=5, label="Available files:"),
-                gr.Column(visible=True),
+        # tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        return [gr.Column(visible=True),
                 gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:", info="Please change the directory here if necessary!"),
                 gr.Text("{}/annotations".format(data_root_path), label="Default detection results can be found here:", info="Please change the directory here if necessary!")]
 
@@ -227,10 +242,22 @@ class AnnLogger():
         """
         self.ann_path = ann_path
         self.det_path = det_path
-        self.det_files = glob(os.path.join(self.det_path, "**/det_*.csv"), recursive=True)
+        self.det_file_list = glob(os.path.join(self.det_path, "**/det_*.csv"), recursive=True)
 
-        return [gr.Dropdown(choices=self.det_files, label="Please select a detection file to annotate:"),
+        return [gr.Dropdown(choices=self.det_file_list, label="Please select a detection file to annotate:"),
                 gr.Column(visible=True)]
+
+    def load_detected_files(self, det_file):
+        self.det_file = det_file
+        self.det_df = pd.read_csv(self.det_file)
+        # Load the annotation file and prepare for annotation.
+        self.aud_files = self.det_df["filename"].unique()
+        return [
+            gr.Accordion("There are {} detected files in total. Open to see all:".format(len(self.aud_files)),
+                         visible=True, open=False),
+            gr.Text("\n".join(list(self.aud_files)), lines=5, label="Available files:"),
+            gr.Row(visible=True)
+        ]
 
     def register_ann_file(self, name):
         """
@@ -243,10 +270,13 @@ class AnnLogger():
         - A list of Gradio components indicating successful registration and the option to start annotation.
         """
         self.annotator_name = name
+        # Set the annotation file path and create the annotation file path.
+        self.ann_file_path = self.det_file.replace(self.det_path, self.ann_path)\
+                                          .replace("det_", "ann_{}_det_".format(self.annotator_name))
         return [gr.Text("Annotator name registered as {}.".format(name), label="Registration Successful!"),
                 gr.Button("Start Annotation!", visible=True)]
 
-    def start_annotation(self, det_file):
+    def start_annotation(self):
         """
         Starts the annotation process for the selected annotation file.
 
@@ -256,12 +286,6 @@ class AnnLogger():
         Returns:
         - A list of Gradio components for initiating the annotation process.
         """
-        # Set the annotation file path and create the annotation file path.
-        self.ann_file_path = det_file.replace(self.det_path, self.ann_path)\
-                                     .replace("det_", "ann_{}_det_".format(self.annotator_name))
-        # Load the annotation file and prepare for annotation.
-        self.det_df = pd.read_csv(det_file)
-        self.aud_files = self.det_df["filename"].unique()
 
         self.current_file = self.aud_files[self.aud_counter]
         self.file_ann = self.det_df.loc[self.det_df["filename"] == self.current_file]
