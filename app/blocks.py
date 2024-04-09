@@ -198,8 +198,8 @@ class Annotation(gr.Blocks):
                     # Load annotations from file
                     get_det_output = gr.Button("Get Detections")
                 # Change label
-                set_info = gr.Text("Please use the dropdown menu to assign a catgegory.",
-                                   label="Instruction:", visible=False)
+                set_info = gr.Text("Click the Get Detection button to get detected segments.",
+                                   label="Instruction:", visible=True)
 
                 with gr.Column(visible=False) as ann_seg_col:
                     with gr.Row():
@@ -242,8 +242,8 @@ class Annotation(gr.Blocks):
                                  outputs=[spec_seg, aud_seg, set_info, ann_seg_col])
             # Next segment button
             seg_next_but.click(self.ann_logger.next_segment, 
-                                   inputs=ann_drop, 
-                                   outputs=[spec_seg, aud_seg, ann_seg_col, set_info, ann_drop])
+                               inputs=ann_drop, 
+                               outputs=[spec_seg, aud_seg, ann_seg_col, set_info, ann_drop])
             # Next audio button
             next_but.click(self.ann_logger.next_audio, 
                            outputs=[ann_col_2, set_info, cur_file_path,
@@ -270,8 +270,6 @@ class Validation(gr.Blocks):
 
                 # Gradio components to show the available files and the path to save the annotation file
                 with gr.Column(visible=False) as path_col:
-                    with gr.Accordion("Open to see all available files.", open=False):
-                        file_list = gr.Text("", lines=5, label="Available files:")
                     ann_path = gr.Text("", label="Default path where annotation and validation files are saved:",
                                        info="Please change the directory here if necessary!")
                     get_ann_but = gr.Button("Get Annotation Files")
@@ -279,7 +277,10 @@ class Validation(gr.Blocks):
                 # Name registering
                 with gr.Column(visible=False) as register_col:
                     ann_drop = gr.Dropdown(choices=[], label="Select an annotation file to validate:") 
-                    with gr.Row():
+                    get_ann_file_but = gr.Button("Load all files with annotated segments.")
+                    with gr.Accordion("", visible=False, open=False) as file_acc:
+                        file_list = gr.Text("", lines=5, label="")
+                    with gr.Row(visible=False) as name_row:
                         ann_name_val = gr.Textbox(lines=1, label="Please put your name here and register before annotation:", interactive=True)
                         ann_name_reg_but_val = gr.Button("Register Your Name", scale=0.5)
 
@@ -360,11 +361,15 @@ class Validation(gr.Blocks):
             # Load the data 
             data_fetch_but.click(self.val_logger.load_data, 
                                  inputs=root_path, 
-                                 outputs=[file_list, path_col, ann_path])
+                                 outputs=[path_col, ann_path])
             # Load the annotation
             get_ann_but.click(self.val_logger.register_ann_path,
                               inputs=ann_path,
                               outputs=[ann_drop, register_col])
+
+            get_ann_file_but.click(self.val_logger.load_ann_files,
+                                   inputs=ann_drop,
+                                   outputs=[file_acc, file_list, name_row])
             # Register the name
             ann_name_reg_but_val.click(self.val_logger.register_val_file,
                                        inputs=ann_name_val,

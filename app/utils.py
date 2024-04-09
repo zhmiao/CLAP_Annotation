@@ -347,7 +347,9 @@ def generate_segs(wav_path, file_ann,
     seg_folder = os.path.join(save_path, "segs")
     if clean_seg_folder:
         shutil.rmtree(seg_folder, ignore_errors=True) 
-    os.makedirs(seg_folder, exist_ok=True)
+
+    # os.makedirs(seg_folder, exist_ok=True)
+    os.makedirs(os.path.join(seg_folder, prefix.rsplit('/', 1)[0]), exist_ok=True)
 
     matplotlib.use("Agg")
 
@@ -374,6 +376,8 @@ def generate_segs(wav_path, file_ann,
 
         bbox = Bbox([[st, 0],[ed, khz_lims[1]]])
         bbox = bbox.transformed(ax.transData).transformed(fig.dpi_scale_trans.inverted())
+
+
         fig.savefig(os.path.join(seg_folder, "{}_ImgSeg_{}_{:.2f}_{}.jpg".format(prefix, st, conf, i)),
                     bbox_inches=bbox)
         sf.write(os.path.join(seg_folder, "{}_AudSeg_{}_{:.2f}_{}.wav".format(prefix, st, conf, i)),

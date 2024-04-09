@@ -335,7 +335,7 @@ class AnnLogger():
         return [gr.Image(img_seg, label="Seg #{}; st: {}s; conf: {}%.".format(seg_id, seg_st, seg_conf*100),
                          interactive=True, sources=[]),
                 gr.Audio(aud_seg, label="Seg #{}; st: {}s; conf: {}%.".format(seg_id, seg_st, seg_conf*100)),
-                gr.Text(visible=True),
+                gr.Text("Please use the drop down menu to assign a catgegory.", visible=True),
                 gr.Column(visible=True)]
 
     def next_audio(self):
@@ -346,6 +346,7 @@ class AnnLogger():
         - A list of Gradio components for the next audio file or a completion message.
         """
         # Proceed to the next audio file for annotation.
+        self.det_df.to_csv(self.ann_file_path, index=False)
         try:
             self.aud_counter += 1
             self.current_file = self.aud_files[self.aud_counter]
@@ -355,7 +356,7 @@ class AnnLogger():
             generate_segs(self.current_file, self.file_ann, prefix="ann")
 
             return [gr.Column(visible=True),
-                    gr.Text(visible=False),
+                    gr.Text("Click the Get Detection button to get detected segments.", visible=True, label="Instruction:"),
                     gr.Text(self.current_file),
                     gr.Image(os.path.join(self.temp_path, "ann_full_spec.jpg"),
                              label="Detection Predictions:"),
@@ -366,7 +367,6 @@ class AnnLogger():
                     gr.Button(visible=False),
                     gr.Dropdown(SPECIES_LIST, label="Select a species:", value=None)]
         except:
-            self.det_df.to_csv(self.ann_file_path, index=False)
             return [gr.Column(visible=False),
                     gr.Text("No more detections to annotate!", visible=True, label="IMPORTANT INFO:"),
                     gr.Text(),
@@ -465,9 +465,8 @@ class ValLogger():
         """
         # Load the files from the directory
         self.data_root = data_root_path
-        tgt_files = glob(os.path.join(self.data_root, "**/*.wav"), recursive=True)
-        return [gr.Text("\n".join(tgt_files), lines=5, label="Available files:"),
-                gr.Column(visible=True),
+        # tgt_files = glob(os.path.join(self.data_root, "**/*.wav"), recursive=True)
+        return [gr.Column(visible=True),
                 gr.Text("{}/annotations".format(self.data_root), label="Default path where annotation and validation files are saved:",
                         info="Please change the directory here if necessary!")]
 
@@ -486,6 +485,17 @@ class ValLogger():
 
         return [gr.Dropdown(choices=self.ann_files, label="Please select an annotation file to validate:"),
                 gr.Column(visible=True)]
+
+    def load_ann_files(self, ann_file):
+        self.ann_df = pd.read_csv(ann_file)
+        self.aud_files = self.ann_df["filename"].unique()
+
+        return [
+            gr.Accordion("There are {} annotated files in total. Open to see all:".format(len(self.aud_files)),
+                         visible=True, open=False),
+            gr.Text("\n".join(list(self.aud_files)), lines=5, label="Available files:"),
+            gr.Row(visible=True)
+        ]
 
     def register_val_file(self, name):
         """
@@ -538,7 +548,8 @@ class ValLogger():
             aud_f = self.aud_files_cat[i]
             ann_f = self.ann_df_cat.loc[self.ann_df_cat["filename"] == aud_f]
             generate_segs(aud_f, ann_f,
-                          prefix=aud_f.split('/')[-1].replace(".wav", ''),
+                        #   prefix=aud_f.split('/')[-1].replace(".wav", ''),
+                          prefix=aud_f.replace(self.data_root+'/', '').replace(".wav", ''),
                           clean_seg_folder=(i == 0), save_full=False)
 
         self.cat_segs = glob("./temp/segs/**/*.jpg", recursive=True)
