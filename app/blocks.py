@@ -154,6 +154,7 @@ class PromptTest(gr.Blocks):
                                 inputs=[det_neg_prompt, det_pos_prompt, det_conf,
                                         ann_path, prompt_sess_id, random_seed],
                                 outputs=finish_text)
+
     
 class Annotation(gr.Blocks):
 
