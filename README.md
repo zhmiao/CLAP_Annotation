@@ -52,12 +52,12 @@ python Gradio_Ann.py
 ### Main interface
 After installation, run the main script to launch the Gradio interface. Open your web browser and navigate to `http://localhost:7860`.
 
-<img src="images/annotation_tab.png" width="700">
+<img src="images/annotation_tab.jpg" width="700">
 
 In this interface you can choose between annotation and validation. During annotation, you can use CLAP to detect and annotate segments in audio files. In validation, you can load and modify previous annotations for accuracy and refinement.
 
 To start annotating segments through the interface, please follow these steps:
-<img src="images/annotation_tab_2.png" width="700">
+<img src="images/annotation_tab_2.jpg" width="700">
 
 1. Select the annotation tab
 2. Select the root directory containing your audio files.
@@ -65,7 +65,7 @@ To start annotating segments through the interface, please follow these steps:
 4. Adjust the detection threshold to fine-tune prediction sensitivity.
 5. Press the Detect! button to show the detected segments.
 
-<img src="images/annotation_tab_3.png" width="700">
+<img src="images/annotation_tab_3.jpg" width="700">
 
 Once you hit the Detect! button, the detected segments will be displayed in the interface. You can then annotate each segment by selecting from a predefined species list, this list can be customized by modifying species_list.py. After annotating all segments, you can go to the next audio file in the directory and repeat this process until all audio files have been annotated.
 

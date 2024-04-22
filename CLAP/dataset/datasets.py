@@ -1,22 +1,18 @@
 # %%
 import os
-import torch.multiprocessing as mp
-
 
 # %%
 import numpy as np
-import librosa
-import librosa.display
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from tqdm import tqdm
 
 # %%
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torchaudio
 import torch
 import torch.nn.functional as F
 
-__all__ = ['Inference_DS']
+__all__ = ["Inference_DS", "Batch_Inference_DS"]
+
 # %%
 def softmax(x, T=1):
     """
@@ -85,6 +81,57 @@ class Inference_DS(Dataset):
         x = self.wav_segs[idx]
         if self.sr != self.target_sr:
             transform = torchaudio.transforms.Resample(self.sr, self.target_sr)
+            x = transform(x)
+
+        return torch.FloatTensor(x).reshape((1, -1))
+
+
+class Batch_Inference_DS(Dataset):
+
+    def __init__(self, wav_list, seg_size=6, target_sr=44100):
+
+        self.data = []
+        self.sts = []
+        self.wav_lens = []
+
+        self.wav_list = wav_list
+
+        self.seg_size = seg_size
+        self.target_sr = target_sr
+        
+        print("Loading data...")
+        for f in tqdm(self.wav_list):
+
+            wav, sr = torchaudio.load(f)
+            wav = wav.reshape(-1)
+
+            wav_length = int(len(wav) / sr)
+            num_segs = int(np.ceil(wav_length / seg_size))
+
+            for i in range(num_segs):
+                self.data.append(f)
+                self.sts.append(self.seg_size * i)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        
+        wav, sr = torchaudio.load(self.data[idx])
+        wav = wav.reshape(-1)
+        st = self.sts[idx] * sr
+
+        step_size = self.seg_size * sr
+        
+        if (st + step_size) <= (len(wav) - 1):
+            x = wav[st : st + step_size]
+        else:
+            x = wav[st:]
+            x_mean = x.mean()
+            x = torch.cat((x, torch.tensor([x_mean for _ in range((st + step_size) - len(wav))])))
+
+        if sr != self.target_sr:
+            transform = torchaudio.transforms.Resample(sr, self.target_sr)
             x = transform(x)
 
         return torch.FloatTensor(x).reshape((1, -1))
