@@ -31,6 +31,7 @@ class PromptTest(gr.Blocks):
 
                     prompt_data_root_path = gr.Text("./demo_data", label="Please type in the directory of where images for prompting are stored:",
                                                   interactive=True)
+                    file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
                     data_fetch_but = gr.Button("Get data from the root directory.")
 
                     # Gradio components to show the available files and the path to save the annotation file
@@ -92,6 +93,7 @@ class PromptTest(gr.Blocks):
             with gr.Column(visible=False) as prompt_final_col:
 
                 data_path = gr.Text("", label="Data directory for batch detection:", info="Please change the directory here if necessary!")
+                batch_extension = gr.Text("", label="File extension for batch detection", info="Please change if necessary!")
                 data_confirm_but = gr.Button("Confirm data root.")
 
                 with gr.Column(visible=False) as prompt_final_col_2:
@@ -111,7 +113,7 @@ class PromptTest(gr.Blocks):
             # %% # Annotation buttons and actions
             # Load the data
             data_fetch_but.click(self.prompt_logger.load_data, 
-                                 inputs=prompt_data_root_path, 
+                                 inputs=[prompt_data_root_path, file_extension], 
                                  outputs=[data_file_list, data_config_col, prompt_path])
             # Get sample data for prompting
             random_data_fetch_but.click(self.prompt_logger.load_sample_data, 
@@ -135,15 +137,15 @@ class PromptTest(gr.Blocks):
 
             submit_but.click(self.prompt_logger.submission,
                              inputs=prompt_data_root_path,
-                             outputs=[prompt_acc, prompt_final_col, data_path])
+                             outputs=[prompt_acc, prompt_final_col, data_path, batch_extension])
 
             data_confirm_but.click(self.prompt_logger.path_confirm,
-                                   inputs=data_path,
+                                   inputs=[data_path, batch_extension],
                                    outputs=[prompt_final_col_2, prompt_finish_col, batch_data_acc, batch_data_file_list,
                                             prompt_path, ann_path])
 
             command_but.click(self.prompt_logger.command_gen,
-                              inputs=[data_path, ann_path, prompt_path, prompt_sess_id, random_seed],
+                              inputs=[data_path, batch_extension, ann_path, prompt_path, prompt_sess_id, random_seed],
                               outputs=command_text)
 
             finish_but.click(self.prompt_logger.finish,
@@ -152,7 +154,7 @@ class PromptTest(gr.Blocks):
 
             batch_det_but.click(self.prompt_logger.batch_detection,
                                 inputs=[det_neg_prompt, det_pos_prompt, det_conf,
-                                        ann_path, prompt_sess_id, random_seed],
+                                        ann_path, batch_extension, prompt_sess_id, random_seed],
                                 outputs=finish_text)
 
     
@@ -169,6 +171,7 @@ class Annotation(gr.Blocks):
             with gr.Accordion("Configurations", open=True) as load_acc:
 
                 root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 
                 # Gradio components to show the available files and the path to save the annotation file
@@ -218,7 +221,7 @@ class Annotation(gr.Blocks):
             # %% # Annotation buttons and actions
             # Load the data
             data_fetch_but.click(self.ann_logger.load_data, 
-                                 inputs=root_path, 
+                                 inputs=[root_path, file_extension], 
                                  outputs=[path_col, ann_path, det_path])
             
             # Load the annotation
@@ -267,6 +270,7 @@ class Validation(gr.Blocks):
             with gr.Accordion("Configurations", open=True) as load_acc:
                 # Dataset to load the annotation
                 root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 
                 # Gradio components to show the available files and the path to save the annotation file
@@ -361,7 +365,7 @@ class Validation(gr.Blocks):
 
             # Load the data 
             data_fetch_but.click(self.val_logger.load_data, 
-                                 inputs=root_path, 
+                                 inputs=[root_path, file_extension], 
                                  outputs=[path_col, ann_path])
             # Load the annotation
             get_ann_but.click(self.val_logger.register_ann_path,

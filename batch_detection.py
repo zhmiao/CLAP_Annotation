@@ -8,10 +8,11 @@ from app.utils import load_models, batch_audio_detection
 
 # %%
 def main(data_root,
+         extension,
          prompt,
          det_out):
 
-    wav_list = glob(os.path.join(data_root, "**/*.wav"), recursive=True)
+    wav_list = glob(os.path.join(data_root, "**/*.{}".format(extension)), recursive=True)
 
     det_file = prompt.split("/")[-1].replace("prompt_", "det_").replace(".json", ".csv")
 

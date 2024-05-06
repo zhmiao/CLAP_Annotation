@@ -216,8 +216,8 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
 
 # %%
 def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.5,
-                          output_spec=True, output_det=False, save_path='./temp',
-                          det_file="det.csv", progress="tqdm"):
+                          output_spec=True, output_det=False, save_path="./temp",
+                          det_file="det.csv", progress="tqdm", input_ext="wav"):
 
     if isinstance(wav_list, str):
         wav_list = wav_list.split("\n")
@@ -228,7 +228,7 @@ def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.
     # Add the segments to the DataLoader.
     inf_dl = DataLoader(
                 inf_dset, batch_size=10, shuffle=False, 
-                pin_memory=True, num_workers=4, drop_last=False
+                pin_memory=False, num_workers=0, drop_last=False
         )
 
     neg_prompts = neg_prompts.rstrip(';').split(';')
@@ -255,7 +255,7 @@ def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.
             preds_f = preds[np.array(inf_dset.data) == f]
             scores_f = total_scores[np.array(inf_dset.data) == f]
             generate_spectrogram_results(wav, sr, inf_dset.seg_size, preds_f, scores_f,
-                                         save_path=save_path, prefix=f.split('/')[-1].replace(".wav", ''),
+                                         save_path=save_path, prefix=f.split('/')[-1].replace(".{}".format(input_ext), ''),
                                          output_segs=False)
     if output_det:
         print("Outputing detection results..")

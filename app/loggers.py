@@ -28,6 +28,7 @@ class PromptLogger():
         """
         
 
+        self.extension = None
         self.tgt_files = None
         self.current_file = None 
 
@@ -40,7 +41,7 @@ class PromptLogger():
 
         self.batch_file_list = []
 
-    def load_data(self, data_root_path):
+    def load_data(self, data_root_path, extension):
         """
         Loads the data from the specified root path and prepares it for annotation.
 
@@ -49,7 +50,8 @@ class PromptLogger():
         Returns:
         """
         # Load the files from the directory
-        tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        self.extension = extension
+        tgt_files = glob(os.path.join(data_root_path, "**/*.{}".format(self.extension)), recursive=True)
         self.tgt_files = tgt_files
         # Display the available files and annotation path.
         return [gr.Text("\n".join(self.tgt_files), lines=5, label="Available files:"),
@@ -67,7 +69,8 @@ class PromptLogger():
         for f in self.sample_files:
             wav, sr = torchaudio.load(f)
             wav = wav.reshape(-1)
-            generate_spectrogram_results(wav, sr, prefix="{}".format(f.split('/')[-1].replace(".wav", '')), save_path=save_path)
+            generate_spectrogram_results(wav, sr, prefix="{}".format(f.split('/')[-1].replace(".{}".format(self.extension), '')),
+                                         save_path=save_path)
         return [gr.Text("\n".join(self.sample_files), lines=5, label="Available files:"),
                 gr.Column(visible=True)]
 
@@ -110,25 +113,29 @@ class PromptLogger():
         file_list = file_list.split("\n")
         
         populated_path = [gr.Image(os.path.join("./temp/prompting_sample_files",
-                                                p.split('/')[-1].replace(".wav", '')+"_spec.jpg"), visible=True, label=p, interactive=False, scale=0.4, sources=[])
+                                                p.split('/')[-1].replace(".{}".format(self.extension), '') + "_spec.jpg"),
+                                   visible=True, label=p, interactive=False, scale=0.4, sources=[])
                           for p in file_list]
         return populated_path + [gr.Image(visible=False)] * (self.max_sample - len(file_list))
     
     def update_image(self, wav_list, neg_prompts, pos_prompts, theta):
         batch_audio_detection(wav_list=wav_list, neg_prompts=neg_prompts, pos_prompts=pos_prompts, theta=theta, 
                               output_spec=True, output_det=False,
-                              save_path="./temp/prompting_sample_files")
+                              save_path="./temp/prompting_sample_files",
+                              input_ext=self.extension)
         return self.populate_image(wav_list)
 
     def submission(self, data_root_path):
         return [gr.Accordion("Prompting results.", open=False),
                 gr.Column(visible=True),
                 gr.Text("{}".format(data_root_path), label="Data directory for batch detection:",
-                        info="Please change the directory here if necessary!", interactive=True)]
+                        info="Please change the directory here if necessary!", interactive=True),
+                gr.Text("{}".format(self.extension), label="File extension for batch detection:",
+                        info="Please change if necessary!", interactive=True)]
 
-    def path_confirm(self, data_root_path):
+    def path_confirm(self, data_root_path, extension):
 
-        self.batch_file_list = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        self.batch_file_list = glob(os.path.join(data_root_path, "**/*.{}".format(extension)), recursive=True)
 
         return [gr.Column(visible=True),
                 gr.Column(visible=True),
@@ -140,11 +147,11 @@ class PromptLogger():
                 gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:",
                         info="Please change the directory here if necessary!", interactive=True)]
 
-    def command_gen(self, data_root, ann_path, prompt_path, sess_id, seed):
+    def command_gen(self, data_root, extension, ann_path, prompt_path, sess_id, seed):
         os.makedirs(prompt_path, exist_ok=True)
         os.makedirs(ann_path, exist_ok=True)
         self.prompt_file = os.path.join(prompt_path, "prompt_{}_id_{}_seed_{}.json".format(self.annotator, sess_id, seed))
-        return gr.Text("python batch_detection.py --data_root {} --prompt {} --det_out {}".format(data_root, self.prompt_file, ann_path),
+        return gr.Text("python batch_detection.py --data_root {} --extension {} --prompt {} --det_out {}".format(data_root, extension, self.prompt_file, ann_path),
                        label="If you are happy with that, please click on the Finish button and run the command in your terminal!",
                        interactive=False)
 
@@ -167,12 +174,13 @@ class PromptLogger():
                 gr.Button("Run Batch Detection!", visible=True),
                 gr.Button(visible=False)]
 
-    def batch_detection(self, neg_prompt, pos_prompt, theta, ann_path, sess_id, seed):
+    def batch_detection(self, neg_prompt, pos_prompt, theta, ann_path, extension, sess_id, seed):
         det_file = "det_{}_id_{}_seed_{}.csv".format(self.annotator, sess_id, seed)
         batch_audio_detection(wav_list=self.batch_file_list, neg_prompts=neg_prompt, pos_prompts=pos_prompt,
                               theta=theta, output_spec=False, output_det=True, 
                               save_path=ann_path, det_file=det_file,
-                              progress="gr")
+                              progress="gr", 
+                              input_ext=extension)
         return gr.Text("Detection file saved to `{}`".format(os.path.join(ann_path, det_file)), label="Batch detection finished. You can start annotation.")
 
 # %%
@@ -197,6 +205,7 @@ class AnnLogger():
     """
     def __init__(self, temp_path="./temp"):
 
+        self.extension = None
         self.ann_path = None
         self.det_path = None
         self.det_file = None
@@ -214,7 +223,7 @@ class AnnLogger():
         self.aud_files = []
         self.current_file = None
 
-    def load_data(self, data_root_path):
+    def load_data(self, data_root_path, extension):
         """
         Loads the data from the specified root path for annotation.
 
@@ -225,7 +234,7 @@ class AnnLogger():
         - A list of Gradio components to display available audio files and annotation path.
         """
         # Load the files from the directory
-        # tgt_files = glob(os.path.join(data_root_path, "**/*.wav"), recursive=True)
+        self.extension = extension
         return [gr.Column(visible=True),
                 gr.Text("{}/annotations".format(data_root_path), label="Annotation file will be saved to:", info="Please change the directory here if necessary!"),
                 gr.Text("{}/annotations".format(data_root_path), label="Default detection results can be found here:", info="Please change the directory here if necessary!")]
@@ -427,6 +436,7 @@ class ValLogger():
     - val_file_path: Path to save the validation file.
     """
     def __init__(self, temp_path="./temp"):
+        self.extension = None
         self.data_root = None
         self.ann_path = None
         self.aud_files = []
@@ -453,7 +463,7 @@ class ValLogger():
         self.aud_counter = 0
         self.current_file = None
 
-    def load_data(self, data_root_path):
+    def load_data(self, data_root_path, extension):
         """
         Loads the data from the specified root path for validation.
 
@@ -465,7 +475,7 @@ class ValLogger():
         """
         # Load the files from the directory
         self.data_root = data_root_path
-        # tgt_files = glob(os.path.join(self.data_root, "**/*.wav"), recursive=True)
+        self.extension = extension
         return [gr.Column(visible=True),
                 gr.Text("{}/annotations".format(self.data_root), label="Default path where annotation and validation files are saved:",
                         info="Please change the directory here if necessary!")]
@@ -548,8 +558,7 @@ class ValLogger():
             aud_f = self.aud_files_cat[i]
             ann_f = self.ann_df_cat.loc[self.ann_df_cat["filename"] == aud_f]
             generate_segs(aud_f, ann_f,
-                        #   prefix=aud_f.split('/')[-1].replace(".wav", ''),
-                          prefix=aud_f.replace(self.data_root+'/', '').replace(".wav", ''),
+                          prefix=aud_f.replace(self.data_root+'/', '').replace(".{}".format(self.extension), ''),
                           clean_seg_folder=(i == 0), save_full=False)
 
         self.cat_segs = glob("./temp/segs/**/*.jpg", recursive=True)
@@ -574,7 +583,7 @@ class ValLogger():
         for i in range(self.seg_counter, (max_render + self.seg_counter)):
             seg = self.cat_segs[i]
             aud = seg.replace("ImgSeg", "AudSeg").replace(".jpg", ".wav")
-            file = seg.replace("./temp/segs", self.data_root).split("_ImgSeg_")[0]+".wav"
+            file = seg.replace("./temp/segs", self.data_root).split("_ImgSeg_")[0]+".{}".format(self.extension)
             seg_conf = float(seg.replace(".jpg", '').split('_')[-2])
             seg_st = int(seg.replace(".jpg", '').split('_')[-3])
             cat = self.ann_df["species"][(self.ann_df["filename"] == file) & (self.ann_df["start_time(s)"] == seg_st)].item()
