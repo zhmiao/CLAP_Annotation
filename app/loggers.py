@@ -500,6 +500,14 @@ class ValLogger():
         self.ann_df = pd.read_csv(ann_file)
         self.aud_files = self.ann_df["filename"].unique()
 
+        if len(self.aud_files) > 1:
+            actual_root = os.path.commonpath(list(self.aud_files))
+        else:
+            actual_root = self.aud_files[0].rsplit('/', 1)[0]
+        
+        if self.data_root != actual_root:
+            self.data_root = actual_root
+
         return [
             gr.Accordion("There are {} annotated files in total. Open to see all:".format(len(self.aud_files)),
                          visible=True, open=False),

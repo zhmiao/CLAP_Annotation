@@ -31,7 +31,7 @@ class PromptTest(gr.Blocks):
 
                     prompt_data_root_path = gr.Text("./demo_data", label="Please type in the directory of where images for prompting are stored:",
                                                   interactive=True)
-                    file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
+                    file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                     data_fetch_but = gr.Button("Get data from the root directory.")
 
                     # Gradio components to show the available files and the path to save the annotation file
@@ -171,7 +171,7 @@ class Annotation(gr.Blocks):
             with gr.Accordion("Configurations", open=True) as load_acc:
 
                 root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
-                file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
+                file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 
                 # Gradio components to show the available files and the path to save the annotation file
@@ -270,7 +270,7 @@ class Validation(gr.Blocks):
             with gr.Accordion("Configurations", open=True) as load_acc:
                 # Dataset to load the annotation
                 root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
-                file_extension = gr.Text("wav", label="File extension for the data.", info="Please change accordingly", interactive=True)
+                file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 
                 # Gradio components to show the available files and the path to save the annotation file
