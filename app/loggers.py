@@ -135,7 +135,8 @@ class PromptLogger():
 
     def path_confirm(self, data_root_path, extension):
 
-        self.batch_file_list = glob(os.path.join(data_root_path, "**/*.{}".format(extension)), recursive=True)
+        self.batch_file_list = [os.path.abspath(p) 
+                                for p in glob(os.path.join(data_root_path, "**/*.{}".format(extension)), recursive=True)]
 
         return [gr.Column(visible=True),
                 gr.Column(visible=True),
@@ -582,7 +583,8 @@ class ValLogger():
                    gr.Column(visible=True),
                    gr.Text("Please use the dropdown menu to change the catgegory.",
                            label="Instruction:", visible=True),
-                   gr.Button("Next Batch", visible=True)]
+                   gr.Button("Next Batch", visible=True),
+                   gr.Button(value="Save and select a new category", visible=False)]
 
         if len(self.cat_segs) - self.seg_counter >= 5:
             max_render = 5
@@ -632,7 +634,8 @@ class ValLogger():
                     gr.Column(visible=True),
                     gr.Text("No more segments to validate for {}. Please select another category.".format(self.current_cat),
                             label="Instruction:", visible=True),
-                    gr.Button(visible=False)] +\
+                    gr.Button(visible=False),
+                    gr.Button(value="Save and select a new category", visible=True)] +\
                    [gr.Column(visible=False),
                     gr.Image(),
                     gr.Audio(),
@@ -646,7 +649,7 @@ class ValLogger():
         return [gr.Accordion("Category selection", open=True, visible=True),
                 gr.Column(visible=len(self.unique_cat) > 0),
                 gr.Column(visible=False),
-                gr.Dropdown(choices=self.unique_cat, label="Available categories:"),
+                gr.Dropdown(choices=self.unique_cat, label="Available categories:", value=None),
                 gr.Markdown("There are {} categories left for validate. ".format(len(self.unique_cat)) +\
                             "Please select one category in the dropdown menu to validate." 
                             if len(self.unique_cat) > 0 else "Please submit"), 

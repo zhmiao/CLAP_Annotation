@@ -359,7 +359,7 @@ class Validation(gr.Blocks):
                     
                     batch_next_but = gr.Button("Next Batch")
 
-                    new_cat_but = gr.Button(value="Save and select a new category", visible=True)
+                    new_cat_but = gr.Button(value="Save and select a new category", visible=False)
 
             submit_but = gr.Button("Submit", visible=False)
 
@@ -390,7 +390,7 @@ class Validation(gr.Blocks):
             
             get_seg_spec_but.click(self.val_logger.populate_segments,
                                    inputs=None,
-                                   outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but,
+                                   outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but, new_cat_but,
                                             col_1, spec_1, aud_1, drop_1, seg_info_1,
                                             col_2, spec_2, aud_2, drop_2, seg_info_2,
                                             col_3, spec_3, aud_3, drop_3, seg_info_3,
@@ -399,7 +399,7 @@ class Validation(gr.Blocks):
 
             batch_next_but.click(self.val_logger.batch_update,
                                  inputs=[drop_1,drop_2,drop_3,drop_4,drop_5],
-                                 outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but,
+                                 outputs=[val_col, cat_sel_acc, val_seg_col, seg_info_val, batch_next_but, new_cat_but,
                                           col_1, spec_1, aud_1, drop_1, seg_info_1,
                                           col_2, spec_2, aud_2, drop_2, seg_info_2,
                                           col_3, spec_3, aud_3, drop_3, seg_info_3,
