@@ -29,8 +29,8 @@ class PromptTest(gr.Blocks):
             with gr.Column(visible=True) as conf_col:
                 with gr.Accordion("Configurations", open=True) as load_acc:
 
-                    prompt_data_root_path = gr.Text("./demo_data", label="Please type in the directory of where images for prompting are stored:",
-                                                  interactive=True)
+                    prompt_data_root_path = gr.Text(os.path.join(".", "demo_data"), label="Please type in the directory of where images for prompting are stored:",
+                                                    interactive=True)
                     file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                     data_fetch_but = gr.Button("Get data from the root directory.")
 
@@ -170,7 +170,7 @@ class Annotation(gr.Blocks):
             # Annotation tab config
             with gr.Accordion("Configurations", open=True) as load_acc:
 
-                root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                root_path = gr.Text(os.path.join(".", "demo_data"), label="Please type in the directory of the dataset root:", interactive=True)
                 file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 
@@ -269,7 +269,7 @@ class Validation(gr.Blocks):
         with self:
             with gr.Accordion("Configurations", open=True) as load_acc:
                 # Dataset to load the annotation
-                root_path = gr.Text("./demo_data", label="Please type in the directory of the dataset root:", interactive=True)
+                root_path = gr.Text(os.path.join(".", "demo_data"), label="Please type in the directory of the dataset root:", interactive=True)
                 file_extension = gr.Text("WAV", label="File extension for the data.", info="Please change accordingly", interactive=True)
                 data_fetch_but = gr.Button("Get data from the root directory.")
 

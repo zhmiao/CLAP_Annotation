@@ -12,9 +12,9 @@ def main(data_root,
          prompt,
          det_out):
 
-    wav_list = glob(os.path.join(data_root, "**/*.{}".format(extension)), recursive=True)
+    wav_list = glob(os.path.join(data_root, "**", "*.{}".format(extension)), recursive=True)
 
-    det_file = prompt.split("/")[-1].replace("prompt_", "det_").replace(".json", ".csv")
+    det_file = prompt.split(os.sep)[-1].replace("prompt_", "det_").replace(".json", ".csv")
 
     with open(prompt, 'r') as f:
         prompt_info = json.load(f)

@@ -47,7 +47,7 @@ def load_models(model_name):
     global clap
     # Load the model
     weights_path = None
-    weights_path = 'weights/{}.pth'.format(model_name)
+    weights_path = os.path.join('weights', '{}.pth'.format(model_name))
     
     print("Loading CLAP model..")
     clap = CLAPWrapper(weights_path, use_cuda=True)
@@ -132,7 +132,7 @@ def compute_similarity(model, data_loader, class_prompts, neg_n=1, pos_n=1, thet
 # %%
 def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_scores=None,
                                  nperseg=1024, noverlap=512, db_range=90,
-                                 cmap='gray', khz_lims=[0, 10], prefix="full", save_path="./temp",
+                                 cmap='gray', khz_lims=[0, 10], prefix="full", save_path=os.path.join(".", "temp"),
                                  output_segs=True):
     """
     Generates and saves prediction results including spectrogram images and audio segments.
@@ -216,7 +216,7 @@ def generate_spectrogram_results(wav, sr, seg_size=None, preds=None, total_score
 
 # %%
 def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.5,
-                          output_spec=True, output_det=False, save_path="./temp",
+                          output_spec=True, output_det=False, save_path=os.path.join(".", "temp"),
                           det_file="det.csv", progress="tqdm", input_ext="wav"):
 
     if isinstance(wav_list, str):
@@ -255,7 +255,7 @@ def batch_audio_detection(wav_list, neg_prompts=None, pos_prompts=None, theta=0.
             preds_f = preds[np.array(inf_dset.data) == f]
             scores_f = total_scores[np.array(inf_dset.data) == f]
             generate_spectrogram_results(wav, sr, inf_dset.seg_size, preds_f, scores_f,
-                                         save_path=save_path, prefix=f.split('/')[-1].replace(".{}".format(input_ext), ''),
+                                         save_path=save_path, prefix=f.split(os.sep)[-1].replace(".{}".format(input_ext), ''),
                                          output_segs=False)
     if output_det:
         print("Outputing detection results..")
@@ -307,7 +307,7 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
 
     print("Outputing figures..")
 
-    save_path = "./temp"
+    save_path = os.path.join(".", "temp")
     generate_spectrogram_results(wav, sr, inf_dset.seg_size, preds, total_scores,
                                  save_path=save_path)
 
@@ -321,7 +321,7 @@ def single_audio_detection(wav_path, neg_prompts=None, pos_prompts=None, theta=0
 # %%
 def generate_segs(wav_path, file_ann, 
                   nperseg=1024, noverlap=512, db_range=90,
-                  cmap='gray', khz_lims=[0, 10], save_path="./temp", prefix="Ann",
+                  cmap='gray', khz_lims=[0, 10], save_path=os.path.join(".", "temp"), prefix="Ann",
                   clean_seg_folder=True, save_full=True):
     """
     Generates and saves segments as images and audio files directly from detection or annotations.
@@ -349,7 +349,7 @@ def generate_segs(wav_path, file_ann,
         shutil.rmtree(seg_folder, ignore_errors=True) 
 
     # os.makedirs(seg_folder, exist_ok=True)
-    os.makedirs(os.path.join(seg_folder, prefix.rsplit('/', 1)[0]), exist_ok=True)
+    os.makedirs(os.path.join(seg_folder, prefix.rsplit(os.sep, 1)[0]), exist_ok=True)
 
     matplotlib.use("Agg")
 
